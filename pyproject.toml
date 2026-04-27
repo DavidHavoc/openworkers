@@ -1,0 +1,41 @@
+[project]
+name = "openworkers"
+version = "0.1.0"
+description = "A research-focused hierarchical multi-agent system MVP."
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.29.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.1",
+    "asyncpg>=0.29.0",
+    "redis>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+    "black>=24.0.0",
+    "flake8>=7.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "apps",
+    "core",
+    "providers",
+    "tools"
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --asyncio-mode=auto"
+testpaths = [
+    "tests",
+]
