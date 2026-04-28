@@ -3,6 +3,12 @@ import asyncio
 from tools.mcp.engine import ToolRegistry, WebSearchTool
 from providers.adapters import LLMAdapter
 from core.evals.harness import EvaluationHarness
+import fakeredis
+
+@pytest.fixture(autouse=True)
+def mock_redis(monkeypatch):
+    server = fakeredis.FakeServer()
+    monkeypatch.setattr("redis.from_url", lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True))
 
 @pytest.mark.asyncio
 async def test_mcp_permissions():
@@ -28,7 +34,7 @@ async def test_adapters_dry_run(monkeypatch):
     adapter = LLMAdapter(tier="worker")
     assert adapter.dry_run is True
     res = await adapter.generate("test prompt")
-    assert "[WORKER DRY_RUN]" in res
+    assert "[WORKER DRY_RUN via DEEPSEEK]" in res
 
 @pytest.mark.asyncio
 async def test_eval_harness():

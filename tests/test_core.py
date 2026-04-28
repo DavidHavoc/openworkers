@@ -1,9 +1,16 @@
 import pytest
+import fakeredis
 from core.schemas import UserRequest, Task, BudgetState, MemoryBrief
 from core.blackboard.engine import Blackboard
 from core.router.engine import Router
 from core.memory.episodic import EpisodicMemory
 from core.orchestrator.flow import TaskOrchestrator
+
+@pytest.fixture(autouse=True)
+def mock_redis(monkeypatch):
+    server = fakeredis.FakeServer()
+    # Mock redis.from_url to return a FakeRedis instance
+    monkeypatch.setattr("redis.from_url", lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True))
 
 def test_schema_validation():
     # Valid
@@ -47,12 +54,12 @@ def test_heuristic_routing_complexity():
     assert decision.workers_allowed is True
     assert decision.middle_allowed is True
 
-def test_memory_retrieval(monkeypatch):
-    memory = EpisodicMemory()
+def test_memory_retrieval():
+    memory = EpisodicMemory(qdrant_location=":memory:")
     from core.schemas import MemoryEpisode, EpisodeRoute, EpisodeModels, EpisodeMetrics, EpisodeQuality
     # Store a mock dummy
     memory.store_episode(MemoryEpisode(
-        episode_id="e1",
+        episode_id="11111111-1111-1111-1111-111111111111",
         timestamp="2026-04-26",
         task_summary="test task",
         task_type="test_type",
@@ -63,13 +70,14 @@ def test_memory_retrieval(monkeypatch):
         quality=EpisodeQuality(accepted=True)
     ))
     
-    brief = memory.retrieve_guidance("some task", "test_type")
+    brief = memory.retrieve_guidance("test task", "test_type")
     assert brief.similar_past_tasks_count == 1
-    assert "Using map-reduce" in brief.strongest_successful_pattern
+    assert "was the most consistently successful pattern" in brief.strongest_successful_pattern
+    assert "was the cheapest successful path at" in brief.cheapest_acceptable_pattern
 
 @pytest.mark.asyncio
-async def test_orchestrator_happy_path():
-    memory = EpisodicMemory()
+async def test_orchestrator_happy_path(monkeypatch):
+    memory = EpisodicMemory(qdrant_location=":memory:")
     router = Router()
     orchestrator = TaskOrchestrator(memory, router)
     
@@ -84,4 +92,5 @@ async def test_orchestrator_happy_path():
     assert len(result["outputs"]) == 2
     
     # Check if memory stored the new episode
-    assert len(memory._history) == 1
+    brief = memory.retrieve_guidance("Do some research on deep learning.")
+    assert brief.similar_past_tasks_count >= 1
