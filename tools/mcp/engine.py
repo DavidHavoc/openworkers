@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 import time
 import logging
+import asyncio
+from duckduckgo_search import DDGS
 
 class MCPTool(ABC):
     """Base class for MCP-style tools."""
@@ -56,7 +58,23 @@ class WebSearchTool(MCPTool):
         return {"type": "object", "properties": {"results": {"type": "array", "items": {"type": "string"}}}}
 
     async def execute_impl(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        return {"results": [f"Search result 1 for {params.get('query')}", "Search result 2"]}
+        query = params.get('query')
+        if not query:
+            return {"results": []}
+            
+        def _search():
+            with DDGS() as ddgs:
+                return list(ddgs.text(query, max_results=5))
+                
+        try:
+            results = await asyncio.to_thread(_search)
+            formatted_results = [
+                f"{r.get('title', '')} - {r.get('body', '')} ({r.get('href', '')})"
+                for r in results
+            ]
+            return {"results": formatted_results}
+        except Exception as e:
+            return {"results": [f"Search failed: {str(e)}"]}
 
 
 class KnowledgeRetrievalTool(MCPTool):
@@ -93,10 +111,18 @@ class StructuredDataLookupTool(MCPTool):
 
 class ToolRegistry:
     def __init__(self):
+        from tools.mcp.academic import (
+            ArxivSearchTool,
+            SemanticScholarSearchTool,
+            CrossRefVerificationTool,
+        )
         self._tools: Dict[str, MCPTool] = {
             "web_search": WebSearchTool(),
             "knowledge_retrieval": KnowledgeRetrievalTool(),
-            "structured_data": StructuredDataLookupTool()
+            "structured_data": StructuredDataLookupTool(),
+            "arxiv_search": ArxivSearchTool(),
+            "semantic_scholar_search": SemanticScholarSearchTool(),
+            "crossref_verification": CrossRefVerificationTool(),
         }
 
     def get_tool(self, tool_name: str) -> MCPTool:

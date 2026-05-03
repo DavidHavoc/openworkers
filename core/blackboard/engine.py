@@ -18,7 +18,7 @@ class Blackboard:
         self.prefix = f"blackboard:{self.session_id}:"
         
     def add_entry(self, entry_type: str, content: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> BlackboardEntry:
-        allowed_types = {"task", "evidence_ref", "route_decision", "agent_output", "status"}
+        allowed_types = {"task", "evidence_ref", "route_decision", "agent_output", "status", "lit_search", "lit_map", "critique", "citation_audit"}
         if entry_type not in allowed_types:
             raise ValueError(f"Invalid entry_type '{entry_type}'. Must be one of {allowed_types}")
             

@@ -12,11 +12,70 @@ class SessionState(BaseModel):
     current_task_id: Optional[str] = None
     created_at: str
 
+class ResearchContext(BaseModel):
+    """What the student gives: their idea + what they need."""
+    research_question: str
+    topic_summary: str
+    discipline: str
+    existing_knowledge: str = ""
+    what_they_need: str = ""
+    language: str = "en"
+
+class LiteratureResult(BaseModel):
+    """A single paper from a search, with verified metadata."""
+    paper_id: str
+    title: str
+    authors: List[str]
+    year: int
+    abstract: str
+    url: str
+    source: str  # "arxiv" | "semantic_scholar"
+    citation_count: int = 0
+    extracted_claims: List[str] = Field(default_factory=list)
+
+class LitMap(BaseModel):
+    """Papers classified by relationship to student's idea."""
+    research_question: str
+    supporting: List[LiteratureResult] = Field(default_factory=list)
+    challenging: List[LiteratureResult] = Field(default_factory=list)
+    adjacent: List[LiteratureResult] = Field(default_factory=list)
+    total_found: int
+    search_query_used: str
+
+class CritiqueResult(BaseModel):
+    """Structured critique — never prose generation."""
+    strengths: List[str] = Field(default_factory=list)
+    weaknesses: List[str] = Field(default_factory=list)
+    gaps: List[str] = Field(default_factory=list)
+    counterarguments: List[str] = Field(default_factory=list)
+    suggestions: List[str] = Field(default_factory=list)
+    methodological_notes: List[str] = Field(default_factory=list)
+    overall_assessment: str = ""
+
+class CitationAudit(BaseModel):
+    claims_checked: int
+    verified_claims: int
+    missing_citations: List[str] = Field(default_factory=list)
+    weak_citations: List[str] = Field(default_factory=list)
+    contested_claims: List[str] = Field(default_factory=list)
+    bibtex_entries: Dict[str, str] = Field(default_factory=dict)
+
+class ResearchSession(BaseModel):
+    session_id: str
+    research_context: ResearchContext
+    lit_map: Optional[LitMap] = None
+    critique: Optional[CritiqueResult] = None
+    citation_audit: Optional[CitationAudit] = None
+    created_at: str
+    status: str = "complete"
+
 class Task(BaseModel):
     task_id: str
+    task_type: str = ""
     description: str
     complexity_estimated: str  # e.g., low, medium, high
     status: str = "pending"
+    research_context: Optional[ResearchContext] = None
 
 class BlackboardEntry(BaseModel):
     entry_id: str

@@ -11,6 +11,9 @@ dependencies = [
     "asyncpg>=0.29.0",
     "redis>=5.0.0",
     "qdrant-client[fastembed]>=1.8.0",
+    "anthropic>=0.25.0",
+    "openai>=1.14.0",
+    "duckduckgo-search>=5.2.0",
 ]
 
 [project.optional-dependencies]
