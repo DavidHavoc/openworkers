@@ -1,34 +1,101 @@
 # OpenWorkers
 
-A research-focused hierarchical multi-agent system MVP.
+A thesis assistant — research partner, not a ghostwriter.
+Searches real literature, critiques student ideas, verifies citations.
+Built on a 3-tier hierarchical multi-agent system.
 
 ## Overview
 
-This project implements an agentic backend where:
-- A trusted **HEAD** agent routes research tasks.
-- Optional **Middle-tier** agents clean, deduplicate, cluster, and summarize.
-- Optional **Worker** agents perform bounded, low-risk, concurrent tasks.
-- **MCP Tools** provide external integration (Web, Knowledge, Data Lookup).
-- An **Episodic Routing Memory** system stores past execution patterns to heavily bias future routing based on cost, quality, and latency.
+The system helps bachelor/master students produce better theses by acting as a critical research partner. It does NOT write prose. Instead it:
 
-The system uses deterministic routing heuristics initially (v1), to establish clear trust boundaries and predictable performance before introducing ML or RL-based optimizers.
+- **Searches** verified literature via arXiv and Semantic Scholar APIs
+- **Classifies** papers as supporting, challenging, or adjacent to the student's idea
+- **Audits** citations — checks if cited papers exist and actually say what the student claims
+- **Critiques** ideas and arguments with structured feedback (strengths, weaknesses, gaps, counterarguments)
+- **Benchmarks** student work against a corpus of real theses (avg section lengths, citation density, common subsections)
+
+**What it never does:**
+- Write thesis sections or paragraphs
+- Invent papers or citations
+- Generate analysis without sources
+
+## Architecture
+
+```
+STUDENT submits research question / idea / draft
+         |
+         v
+  ┌──────────────┐
+  │  WORKER:     │  Lit search via MCP tools (arXiv, Semantic Scholar)
+  │  researcher  │  Returns verified papers with DOIs
+  └──────┬───────┘
+         v
+  ┌──────────────┐
+  │  MIDDLE:     │  Evidence verification + citation audit
+  │  checker     │  Flags weak citations, contradictions
+  └──────┬───────┘
+         v
+  ┌──────────────┐
+  │  HEAD:       │  Structured critique: what's weak, what's missing,
+  │  supervisor  │  counterarguments, suggestions
+  └──────┬───────┘
+         v
+  STUDENT gets: lit map + critique + citation audit + corpus benchmarks
+```
 
 ## Tech Stack
-- **Python 3.12**
-- **FastAPI**: API delivery and synchronization endpoints.
-- **Pydantic**: Type-safety and data contracts.
-- **Postgres**: Durable episodic knowledge and user state.
-- **Redis**: Fast broker and blackboard sharing.
-- **Docker Compose** & **pytest**.
+- **Python 3.12**, **Pydantic** — type-safe data models
+- **Qdrant** + **FastEmbed** — episodic memory + thesis corpus
+- **Redis** — shared state via blackboard
+- **Anthropic / OpenAI / DeepSeek** — 3-tier agent providers
+- **MCP tools** — arXiv, Semantic Scholar, CrossRef APIs
+- **Docker Compose** & **pytest**
 
-## Architecture & Data
-See [docs/architecture.md](docs/architecture.md) for a detailed breakdown of the tiers and components.
-See [docs/examples.md](docs/examples.md) for structure samples like Memory Episodes and routing outputs.
+## Usage
 
-## local development runbook
+### CLI (Phase 8)
 
-### 1. Requirements
-Ensure Python 3.12 is installed, running inside a virtual environment.
+```bash
+# Full research session
+thesis research "How do sparse attention mechanisms compare to dense ones?"
+
+# Critique an idea or draft section
+thesis critique "My methodology uses a within-subjects design with 20 participants"
+
+# Verify a citation
+thesis verify "Smith 2023 found that attention is quadratic in sequence length"
+
+# Quick paper search (no LLM, pure API)
+thesis papers "transformer attention mechanisms" --limit 10
+
+# Resume a previous session
+thesis resume SESSION_ID
+
+# Ingest a thesis into the corpus
+thesis corpus ingest "path/to/thesis.pdf" --discipline computer_science --year 2024
+```
+
+### MCP Server (Phase 9)
+
+Add to OpenCode or Claude Code:
+
+```json
+{
+  "mcpServers": {
+    "thesis-assistant": {
+      "command": "python",
+      "args": ["-m", "apps.mcp_server.main"],
+      "cwd": "/path/to/openworkers"
+    }
+  }
+}
+```
+
+Then use natively in conversation: *"Find papers on sparse attention and critique my research question."*
+
+## local development
+
+### Setup
 
 ```bash
 python3 -m venv .venv
@@ -36,24 +103,46 @@ source .venv/bin/activate
 make install
 ```
 
-### 2. Provider configuration
-Copy `.env.example` to `.env`. Turn `DRY_RUN=true` to execute offline simulated behavior. Turn to `DRY_RUN=false` once you append explicit LLM Keys.
+Copy `.env.example` to `.env`. Set `DRY_RUN=true` to run without API keys.
 
-### 3. Evoking the Harness
-We established an offline evaluation harness reproducing three different bounding criteria tasks natively. Run:
+### Run
 
 ```bash
-python core/evals/harness.py
+# CLI
+python -m apps.cli.main research "your question" --format text
+
+# Eval harness
+python core/evals/thesis_harness.py
 ```
 
-### 4. Running unit & integration bounds
+### Tests
 
 ```bash
 pytest tests/ -v
 ```
 
-## troubleshooting
+## Implementation Roadmap
 
-- **`ImportError: cannot import name ...`**: Ensure your execution points load `.venv/bin/activate`. If using standard Python path structures, ensure you are running `pytest` natively from the repo root to recognize local modules like `providers.adapters`.
-- **`Security Violation: Tier 'public' not allowed`**: This is an intended strict override. Ensure you are passing correct context permissions directly during system mapping to limit `KnowledgeRetrievalTool` access securely.
-- **No logs mapping observed execution traces**: Ensure you are observing terminal output directly via `./venv/bin/python`, as the `StructuredLogger` leverages default STDOUT streams dynamically bound upon first orchestrator fetch.
+See [PHASES.md](PHASES.md) for the full build plan. Summary:
+
+| Phase | What |
+|---|---|
+| 1 | Data models (ResearchContext, LitMap, CritiqueResult, etc.) |
+| 2 | Academic MCP tools (arXiv, Semantic Scholar, CrossRef) |
+| 3 | System prompt templates |
+| 4 | Thesis agent providers |
+| 5 | Orchestrator |
+| 6 | Router update |
+| 7 | Evaluation harness |
+| 8 | CLI tool |
+| 9 | MCP server (OpenCode + Claude Code) |
+| 10 | Thesis corpus learning |
+
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the tier breakdown.
+See [docs/examples.md](docs/examples.md) for output format samples.
+
+## License
+
+MIT — DavidHavoc, 2026
