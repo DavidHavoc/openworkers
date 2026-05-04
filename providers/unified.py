@@ -1,0 +1,243 @@
+import os
+import time
+import logging
+from dataclasses import dataclass, field
+from typing import Dict, Any, List, Optional, Callable
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LLMResponse:
+    content: str
+    provider_used: str
+    model: str
+    mode: str
+    latency_ms: float
+    cost_estimate_usd: float
+    fallback_used: bool = False
+    dry_run: bool = False
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+COST_PER_1K_TOKENS: Dict[str, float] = {
+    "anthropic": 0.015,
+    "openai": 0.005,
+    "deepseek": 0.0014,
+}
+
+ALL_PROVIDERS = ["anthropic", "openai", "deepseek"]
+
+DEFAULT_MODELS: Dict[str, str] = {
+    "anthropic": "claude-sonnet-4-20250514",
+    "openai": "gpt-4o-mini",
+    "deepseek": "deepseek-chat",
+}
+
+
+def _read_mode_config(mode: str, dry_run: bool = False) -> tuple[str, str]:
+    key = mode.upper()
+    provider = os.environ.get(f"THESIS_{key}_PROVIDER", "").strip().lower()
+    model = os.environ.get(f"THESIS_{key}_MODEL", "").strip()
+    if not provider:
+        if dry_run:
+            if mode == "auto":
+                return _read_mode_config("balanced", dry_run=True)
+            defaults = {"quality": "anthropic", "balanced": "openai", "cheap": "deepseek"}
+            provider = defaults.get(mode, "openai")
+        else:
+            raise RuntimeError(
+                f"THESIS_{key}_PROVIDER is not set. "
+                f"Add THESIS_{key}_PROVIDER and THESIS_{key}_MODEL to your .env file."
+            )
+    if not model:
+        model = DEFAULT_MODELS.get(provider, "unknown")
+    return provider, model
+
+
+class ProviderHealthCache:
+    def __init__(self, ttl_seconds: int = 60):
+        self.ttl = ttl_seconds
+        self._cache: Dict[str, tuple[bool, float]] = {}
+
+    def is_healthy(self, provider: str) -> bool:
+        entry = self._cache.get(provider)
+        if entry is None:
+            return True
+        healthy, timestamp = entry
+        if time.monotonic() - timestamp > self.ttl:
+            del self._cache[provider]
+            return True
+        return healthy
+
+    def mark_unhealthy(self, provider: str):
+        self._cache[provider] = (False, time.monotonic())
+
+    def mark_healthy(self, provider: str):
+        if provider in self._cache:
+            del self._cache[provider]
+
+
+class UnifiedLLM:
+    def __init__(self, blackboard=None):
+        self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
+        self.blackboard = blackboard
+        self.health_cache = ProviderHealthCache()
+        self._session_spend: Dict[str, float] = {}
+        self._generate_fn: Optional[Callable] = None
+        self._available_providers: List[str] = []
+
+    def validate_startup(self):
+        if self.dry_run:
+            return
+        for mode in ("quality", "balanced", "cheap"):
+            key = mode.upper()
+            if not os.environ.get(f"THESIS_{key}_PROVIDER"):
+                raise RuntimeError(
+                    f"THESIS_{key}_PROVIDER is not set. "
+                    f"Configure THESIS_{key}_PROVIDER and THESIS_{key}_MODEL in your .env file. "
+                    f"See Phase 4 docs for provider routing configuration."
+                )
+
+    def set_generate_fn(self, fn: Callable):
+        self._generate_fn = fn
+
+    def set_available_providers(self, providers: List[str]):
+        self._available_providers = providers
+
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        mode: str = "auto",
+        budget: Optional[float] = None,
+    ) -> LLMResponse:
+        preferred_provider, preferred_model = _read_mode_config(mode, dry_run=self.dry_run)
+        t0 = time.monotonic()
+
+        if self.dry_run:
+            elapsed = (time.monotonic() - t0) * 1000
+            response = LLMResponse(
+                content=f"[DRY_RUN mode={mode} provider={preferred_provider} model={preferred_model}] Would call {preferred_provider}/{preferred_model}. Prompt: {prompt[:80]}...",
+                provider_used=preferred_provider,
+                model=preferred_model,
+                mode=mode,
+                latency_ms=elapsed,
+                cost_estimate_usd=0.0,
+                dry_run=True,
+                metadata={
+                    "preferred_provider": preferred_provider,
+                    "preferred_model": preferred_model,
+                    "available_providers": self._available_providers,
+                    "skipped_due_to_health": [],
+                    "reason": f"mode={mode} preferred={preferred_provider}/{preferred_model}",
+                },
+            )
+            logger.info(
+                f"ROUTE: dry_run mode={mode} -> {preferred_provider}/{preferred_model} "
+                f"(available={self._available_providers})"
+            )
+            return response
+
+        order = self._build_try_order(preferred_provider, mode)
+        reason = f"mode={mode} preferred={preferred_provider}/{preferred_model}"
+        skipped: List[str] = []
+        last_error: Optional[Exception] = None
+
+        for provider in order:
+            if not self.health_cache.is_healthy(provider):
+                skipped.append(provider)
+                logger.info(f"ROUTE: skipping {provider} (health check failed)")
+                continue
+
+            if budget is not None and self._get_spend(provider) >= budget:
+                skipped.append(provider)
+                logger.info(f"ROUTE: skipping {provider} (budget exhausted)")
+                continue
+
+            model = preferred_model if provider == preferred_provider else self._default_model_for(provider)
+
+            try:
+                result = await self._call_provider(provider, model, prompt, system_prompt)
+                elapsed = (time.monotonic() - t0) * 1000
+                cost = self._estimate_cost(result, provider)
+
+                if budget is not None:
+                    self._add_spend(provider, cost)
+
+                fallback = provider != preferred_provider
+                response = LLMResponse(
+                    content=result,
+                    provider_used=provider,
+                    model=model,
+                    mode=mode,
+                    latency_ms=elapsed,
+                    cost_estimate_usd=cost,
+                    fallback_used=fallback,
+                    metadata={
+                        "preferred_provider": preferred_provider,
+                        "preferred_model": preferred_model,
+                        "try_order": order,
+                        "skipped_due_to_health": skipped,
+                        "reason": reason,
+                        "last_error": str(last_error) if last_error else None,
+                    },
+                )
+                self.health_cache.mark_healthy(provider)
+                logger.info(
+                    f"ROUTE: mode={mode} -> {provider}/{model} "
+                    f"(preferred={preferred_provider}/{preferred_model}) "
+                    f"latency={elapsed:.1f}ms cost=${cost:.6f} fallback={fallback}"
+                )
+                return response
+            except Exception as e:
+                last_error = e
+                self.health_cache.mark_unhealthy(provider)
+                logger.warning(f"ROUTE: {provider}/{model} failed for mode={mode}: {e}. Falling back.")
+
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.error(f"ROUTE: all providers failed for mode={mode}: {last_error}")
+        return LLMResponse(
+            content=f"[ALL_PROVIDERS_FAILED] {last_error}",
+            provider_used="none",
+            model="none",
+            mode=mode,
+            latency_ms=elapsed,
+            cost_estimate_usd=0.0,
+            fallback_used=True,
+            metadata={
+                "preferred_provider": preferred_provider,
+                "preferred_model": preferred_model,
+                "try_order": order,
+                "last_error": str(last_error) if last_error else None,
+            },
+        )
+
+    def _build_try_order(self, preferred: str, mode: str) -> List[str]:
+        available = self._available_providers if self._available_providers else ALL_PROVIDERS
+        order: List[str] = []
+        if preferred in available:
+            order.append(preferred)
+        for p in available:
+            if p not in order:
+                order.append(p)
+        return order
+
+    async def _call_provider(self, provider: str, model: str, prompt: str, system_prompt: str) -> str:
+        if self._generate_fn:
+            return await self._generate_fn(provider, model, prompt, system_prompt)
+        return f"[NO_PROVIDER] {provider}/{model} unavailable"
+
+    def _default_model_for(self, provider: str) -> str:
+        return DEFAULT_MODELS.get(provider, "unknown")
+
+    def _estimate_cost(self, text: str, provider: str) -> float:
+        tokens = len(text) / 3.5
+        rate = COST_PER_1K_TOKENS.get(provider, 0.005)
+        return (tokens / 1000) * rate
+
+    def _get_spend(self, provider: str) -> float:
+        return self._session_spend.get(provider, 0.0)
+
+    def _add_spend(self, provider: str, amount: float):
+        self._session_spend[provider] = self._get_spend(provider) + amount

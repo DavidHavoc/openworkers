@@ -21,6 +21,17 @@ class ResearchContext(BaseModel):
     what_they_need: str = ""
     language: str = "en"
 
+class ResearchPlan(BaseModel):
+    """Output of HEAD planner: subquestions, search lanes, evidence needs, budget."""
+    plan_id: str
+    research_question: str
+    subquestions: List[str] = Field(default_factory=list)
+    strategy: str = ""  # broad_survey | targeted_gap_analysis | methodology_critique | full_pass
+    search_lanes: List[Dict[str, str]] = Field(default_factory=list)
+    evidence_needs: List[str] = Field(default_factory=list)
+    budget_allocation: Dict[str, Any] = Field(default_factory=dict)
+    suggested_methodology: str = ""
+
 class LiteratureResult(BaseModel):
     """A single paper from a search, with verified metadata."""
     paper_id: str
@@ -52,6 +63,16 @@ class CritiqueResult(BaseModel):
     methodological_notes: List[str] = Field(default_factory=list)
     overall_assessment: str = ""
 
+class SynthesisReport(BaseModel):
+    """Extracted methods/datasets/metrics from papers, corpus comparisons."""
+    research_question: str = ""
+    method_summary: Dict[str, List[str]] = Field(default_factory=dict)
+    dataset_summary: Dict[str, Any] = Field(default_factory=dict)
+    metric_summary: Dict[str, Any] = Field(default_factory=dict)
+    corpus_insights: Dict[str, List[str]] = Field(default_factory=dict)
+    recommended_reading: List[Dict[str, str]] = Field(default_factory=list)
+    cross_paper_comparisons: List[Dict[str, Any]] = Field(default_factory=list)
+
 class CitationAudit(BaseModel):
     claims_checked: int
     verified_claims: int
@@ -63,9 +84,11 @@ class CitationAudit(BaseModel):
 class ResearchSession(BaseModel):
     session_id: str
     research_context: ResearchContext
+    research_plan: Optional[ResearchPlan] = None
     lit_map: Optional[LitMap] = None
-    critique: Optional[CritiqueResult] = None
     citation_audit: Optional[CitationAudit] = None
+    synthesis_report: Optional[SynthesisReport] = None
+    critique: Optional[CritiqueResult] = None
     created_at: str
     status: str = "complete"
 
