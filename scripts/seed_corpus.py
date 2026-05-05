@@ -7,11 +7,12 @@ Run: python -m scripts.seed_corpus
 
 import os
 import json
-import urllib.request
 import urllib.parse
 import tempfile
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
+
+import httpx
 
 ARXIV_NAMESPACES = {
     "atom": "http://www.w3.org/2005/Atom",
@@ -34,10 +35,11 @@ def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
         f"search_query=all:{urllib.parse.quote_plus(query)}"
         f"&start=0&max_results={max_results}&sortBy=relevance&sortOrder=descending"
     )
-    req = urllib.request.Request(url, headers={"User-Agent": "SeedCorpus/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = resp.read().decode("utf-8")
+        with httpx.Client(timeout=30) as client:
+            resp = client.get(url, headers={"User-Agent": "SeedCorpus/1.0"})
+            resp.raise_for_status()
+            raw = resp.text
         root = ET.fromstring(raw)
         papers = []
         for entry in root.findall("atom:entry", ARXIV_NAMESPACES):
@@ -77,10 +79,11 @@ def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
 
 def _download_pdf_text(arxiv_id: str) -> str:
     url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
-    req = urllib.request.Request(url, headers={"User-Agent": "SeedCorpus/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            pdf_bytes = resp.read()
+        with httpx.Client(timeout=60) as client:
+            resp = client.get(url, headers={"User-Agent": "SeedCorpus/1.0"})
+            resp.raise_for_status()
+            pdf_bytes = resp.content
         import fitz
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         text = ""

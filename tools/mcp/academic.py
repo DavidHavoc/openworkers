@@ -1,9 +1,9 @@
-import urllib.request
 import urllib.parse
-import urllib.error
 import xml.etree.ElementTree as ET
 import json
 from typing import Dict, Any, List
+
+import httpx
 
 from tools.mcp.engine import MCPTool
 
@@ -69,14 +69,15 @@ class ArxivSearchTool(MCPTool):
         )
 
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "OpenWorkers/1.0"})
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                raw = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="replace") if e.fp else ""
-            return {"papers": [], "total_results": 0, "error": f"arXiv API returned {e.code}: {body[:300]}"}
-        except urllib.error.URLError as e:
-            return {"papers": [], "total_results": 0, "error": f"arXiv API request failed: {e.reason}"}
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.get(url, headers={"User-Agent": "OpenWorkers/1.0"})
+                resp.raise_for_status()
+                raw = resp.text
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300] if e.response.text else ""
+            return {"papers": [], "total_results": 0, "error": f"arXiv API returned {e.response.status_code}: {body}"}
+        except httpx.RequestError as e:
+            return {"papers": [], "total_results": 0, "error": f"arXiv API request failed: {e}"}
 
         try:
             root = ET.fromstring(raw)
@@ -199,14 +200,15 @@ class SemanticScholarSearchTool(MCPTool):
         )
 
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "OpenWorkers/1.0"})
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="replace") if e.fp else ""
-            return {"papers": [], "total": 0, "error": f"Semantic Scholar API returned {e.code}: {body[:300]}"}
-        except urllib.error.URLError as e:
-            return {"papers": [], "total": 0, "error": f"Semantic Scholar API request failed: {e.reason}"}
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.get(url, headers={"User-Agent": "OpenWorkers/1.0"})
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300] if e.response.text else ""
+            return {"papers": [], "total": 0, "error": f"Semantic Scholar API returned {e.response.status_code}: {body}"}
+        except httpx.RequestError as e:
+            return {"papers": [], "total": 0, "error": f"Semantic Scholar API request failed: {e}"}
         except json.JSONDecodeError:
             return {"papers": [], "total": 0, "error": "Semantic Scholar returned invalid JSON"}
         except Exception as e:
@@ -277,16 +279,17 @@ class CrossRefVerificationTool(MCPTool):
         url = f"https://api.crossref.org/works/{urllib.parse.quote(doi, safe='')}"
 
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "OpenWorkers/1.0 (mailto:dev@openworkers.ai)"})
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return {"exists": False, "doi": doi}
-            body = e.read().decode("utf-8", errors="replace") if e.fp else ""
-            return {"exists": False, "doi": doi, "error": f"CrossRef API returned {e.code}: {body[:300]}"}
-        except urllib.error.URLError as e:
-            return {"exists": False, "doi": doi, "error": f"CrossRef API request failed: {e.reason}"}
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.get(url, headers={"User-Agent": "OpenWorkers/1.0 (mailto:dev@openworkers.ai)"})
+                if resp.status_code == 404:
+                    return {"exists": False, "doi": doi}
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300] if e.response.text else ""
+            return {"exists": False, "doi": doi, "error": f"CrossRef API returned {e.response.status_code}: {body}"}
+        except httpx.RequestError as e:
+            return {"exists": False, "doi": doi, "error": f"CrossRef API request failed: {e}"}
         except json.JSONDecodeError:
             return {"exists": False, "doi": doi, "error": "CrossRef returned invalid JSON"}
         except Exception as e:

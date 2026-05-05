@@ -94,3 +94,68 @@ async def test_orchestrator_happy_path(monkeypatch):
     # Check if memory stored the new episode
     brief = memory.retrieve_guidance("Do some research on deep learning.")
     assert brief.similar_past_tasks_count >= 1
+
+
+def test_thesis_get_entries_delegates_to_blackboard():
+    """_get_entries() returns blackboard entries without infinite recursion."""
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from providers.unified import UnifiedLLM
+    from core.memory.episodic import EpisodicMemory
+    from core.router.engine import Router
+
+    bb = Blackboard()
+    bb.add_entry("task", {"desc": "a"})
+    bb.add_entry("status", {"stage": "init"})
+
+    unified = UnifiedLLM()
+    memory = EpisodicMemory(qdrant_location=":memory:")
+    router = Router()
+
+    orch = ThesisOrchestrator(unified=unified, memory=memory, router=router, blackboard=bb)
+    entries = orch._get_entries()
+
+    assert len(entries) == 2
+    assert entries[0].entry_type == "task"
+    assert entries[1].entry_type == "status"
+
+
+@pytest.mark.asyncio
+async def test_thesis_pipeline_dry_run_completes(monkeypatch):
+    """Full 8-stage thesis pipeline completes in DRY_RUN mode without fatal errors."""
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from providers.unified import UnifiedLLM
+    from core.memory.episodic import EpisodicMemory
+    from core.router.engine import Router
+    from core.schemas import ResearchContext
+    from tools.mcp.engine import ToolRegistry
+
+    monkeypatch.setenv("DRY_RUN", "true")
+
+    unified = UnifiedLLM()
+    memory = EpisodicMemory(qdrant_location=":memory:")
+    router = Router()
+    tools = ToolRegistry()
+
+    orch = ThesisOrchestrator(
+        unified=unified,
+        memory=memory,
+        router=router,
+        tool_registry=tools,
+    )
+
+    rc = ResearchContext(
+        research_question="Does caffeine improve proofreading accuracy?",
+        topic_summary="A meta-analysis of caffeine and attention-to-detail tasks.",
+        discipline="psychology",
+    )
+
+    session = await orch.execute(rc)
+
+    assert session.status in ("complete", "partial")
+    assert session.session_id
+    assert session.research_context == rc
+    assert session.research_plan is not None
+    assert session.lit_map is not None
+    assert session.citation_audit is not None
+    assert session.synthesis_report is not None
+    assert session.critique is not None

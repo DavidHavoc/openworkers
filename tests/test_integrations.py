@@ -31,10 +31,11 @@ async def test_mcp_permissions():
 @pytest.mark.asyncio
 async def test_adapters_dry_run(monkeypatch):
     monkeypatch.setenv("DRY_RUN", "true")
-    adapter = LLMAdapter(tier="worker")
+    adapter = LLMAdapter(provider="deepseek")
     assert adapter.dry_run is True
     res = await adapter.generate("test prompt")
-    assert "[WORKER DRY_RUN via DEEPSEEK]" in res
+    assert "DEEPSEEK" in res
+    assert "DRY_RUN" in res
 
 @pytest.mark.asyncio
 async def test_eval_harness():

@@ -38,6 +38,8 @@ def _read_provider_for_mode(mode: str) -> tuple[str, str]:
     key = mode.upper()
     provider = os.environ.get(f"THESIS_{key}_PROVIDER", "").strip().lower()
     model = os.environ.get(f"THESIS_{key}_MODEL", "").strip()
+    if not model and provider:
+        model = "unknown"
     return provider, model
 
 

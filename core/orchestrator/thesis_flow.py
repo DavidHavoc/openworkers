@@ -77,7 +77,7 @@ class ThesisOrchestrator:
 
     def _get_entries(self) -> List[BlackboardEntry]:
         try:
-            return self._get_entries()
+            return self.blackboard.get_all_entries()
         except Exception:
             return []
 
@@ -100,6 +100,20 @@ class ThesisOrchestrator:
         )
         self._add_entry("task", task.model_dump())
 
+        budget = BudgetState(remaining_usd=1.00, spent_usd=0.0, token_limit=100000)
+        route = self.router.route_thesis_task(
+            phase="full",
+            privacy_tier="public",
+            budget=budget,
+            research_plan=None,
+        )
+        self._add_entry("route_decision", {
+            "phase": route.phase,
+            "reason": route.reason,
+            "agents": route.agents_to_run(),
+            "provider_map": {k: list(v) for k, v in route.provider_map.items()},
+        })
+
         obs_logger.log_event("thesis_pipeline_started", session_id, {
             "research_question": research_context.research_question,
             "discipline": research_context.discipline,
@@ -107,19 +121,23 @@ class ThesisOrchestrator:
 
         # ── Stage 1: HEAD planner ──
         research_plan: Optional[ResearchPlan] = None
-        try:
-            result = await self.head.execute(
-                task,
-                {"blackboard_entries": self._get_entries()},
-                mode="planner",
-            )
-            research_plan = result["output"]
-            self._add_entry("agent_output", result)
-            obs_logger.log_event("stage_completed", session_id, {"stage": "head_planner", "status": "success"})
-        except Exception as e:
-            errors.append(f"head_planner: {e}")
+        if route.activate_head_planner:
+            try:
+                result = await self.head.execute(
+                    task,
+                    {"blackboard_entries": self._get_entries()},
+                    mode="planner",
+                )
+                research_plan = result["output"]
+                self._add_entry("agent_output", result)
+                obs_logger.log_event("stage_completed", session_id, {"stage": "head_planner", "status": "success"})
+            except Exception as e:
+                errors.append(f"head_planner: {e}")
+                research_plan = _build_placeholder_research_plan(research_context.research_question)
+                obs_logger.log_event("stage_failed", session_id, {"stage": "head_planner", "error": str(e)})
+        else:
             research_plan = _build_placeholder_research_plan(research_context.research_question)
-            obs_logger.log_event("stage_failed", session_id, {"stage": "head_planner", "error": str(e)})
+            obs_logger.log_event("stage_skipped", session_id, {"stage": "head_planner"})
 
         # ── Stage 2: Memory retrieval ──
         memory_brief: Optional[MemoryBrief] = None
@@ -137,64 +155,78 @@ class ThesisOrchestrator:
 
         # ── Stage 3: Researcher (literature search) ──
         lit_map: Optional[LitMap] = None
-        try:
-            raw_papers = await self._search_literature_from_plan(research_plan)
-            if raw_papers:
-                deduped = self._deduplicate_papers(raw_papers)
-                self._add_entry("lit_search", {
-                    "query": research_plan.search_lanes[0].get("query", "") if research_plan.search_lanes else "",
-                    "source": research_plan.search_lanes[0].get("source", "") if research_plan.search_lanes else "",
-                    "raw_results": len(raw_papers),
-                    "deduplicated": len(deduped),
-                    "papers": [p if isinstance(p, dict) else p.model_dump() for p in deduped],
-                })
-                search_context = self._get_entries()
-            else:
-                search_context = self._get_entries()
+        if route.activate_researcher:
+            try:
+                raw_papers = await self._search_literature_from_plan(research_plan)
+                if raw_papers:
+                    deduped = self._deduplicate_papers(raw_papers)
+                    self._add_entry("lit_search", {
+                        "query": research_plan.search_lanes[0].get("query", "") if research_plan.search_lanes else "",
+                        "source": research_plan.search_lanes[0].get("source", "") if research_plan.search_lanes else "",
+                        "raw_results": len(raw_papers),
+                        "deduplicated": len(deduped),
+                        "papers": [p if isinstance(p, dict) else p.model_dump() for p in deduped],
+                    })
+                    search_context = self._get_entries()
+                else:
+                    search_context = self._get_entries()
 
-            result = await self.researcher.execute(
-                task, {"blackboard_entries": search_context}
-            )
-            lit_map = result["output"]
-            self._add_entry("lit_map", lit_map.model_dump())
-            obs_logger.log_event("stage_completed", session_id, {"stage": "researcher", "status": "success"})
-        except Exception as e:
-            errors.append(f"researcher: {e}")
+                result = await self.researcher.execute(
+                    task, {"blackboard_entries": search_context}
+                )
+                lit_map = result["output"]
+                self._add_entry("lit_map", lit_map.model_dump())
+                obs_logger.log_event("stage_completed", session_id, {"stage": "researcher", "status": "success"})
+            except Exception as e:
+                errors.append(f"researcher: {e}")
+                lit_map = _build_placeholder_lit_map(research_context.research_question)
+                obs_logger.log_event("stage_failed", session_id, {"stage": "researcher", "error": str(e)})
+        else:
             lit_map = _build_placeholder_lit_map(research_context.research_question)
-            obs_logger.log_event("stage_failed", session_id, {"stage": "researcher", "error": str(e)})
+            obs_logger.log_event("stage_skipped", session_id, {"stage": "researcher"})
 
         # ── Stage 4: Checker (citation audit) ──
         citation_audit: Optional[CitationAudit] = None
-        try:
-            result = await self.checker.execute(
-                task, {"blackboard_entries": self._get_entries()}
-            )
-            citation_audit = result["output"]
-            self._add_entry("citation_audit", citation_audit.model_dump())
-            obs_logger.log_event("stage_completed", session_id, {"stage": "checker", "status": "success"})
-        except Exception as e:
-            errors.append(f"checker: {e}")
+        if route.activate_checker:
+            try:
+                result = await self.checker.execute(
+                    task, {"blackboard_entries": self._get_entries()}
+                )
+                citation_audit = result["output"]
+                self._add_entry("citation_audit", citation_audit.model_dump())
+                obs_logger.log_event("stage_completed", session_id, {"stage": "checker", "status": "success"})
+            except Exception as e:
+                errors.append(f"checker: {e}")
+                citation_audit = _build_placeholder_citation_audit()
+                obs_logger.log_event("stage_failed", session_id, {"stage": "checker", "error": str(e)})
+        else:
             citation_audit = _build_placeholder_citation_audit()
-            obs_logger.log_event("stage_failed", session_id, {"stage": "checker", "error": str(e)})
+            obs_logger.log_event("stage_skipped", session_id, {"stage": "checker"})
 
         # ── Stage 5: Synthesizer ──
         synthesis_report: Optional[SynthesisReport] = None
-        try:
-            result = await self.synthesizer.execute(
-                task, {"blackboard_entries": self._get_entries()}
-            )
-            synthesis_report = result["output"]
-            self._add_entry("status", {
-                "entry_type": "synthesis_report",
-                "content": synthesis_report.model_dump(),
-            })
-            obs_logger.log_event("stage_completed", session_id, {"stage": "synthesizer", "status": "success"})
-        except Exception as e:
-            errors.append(f"synthesizer: {e}")
+        if route.activate_synthesizer:
+            try:
+                result = await self.synthesizer.execute(
+                    task, {"blackboard_entries": self._get_entries()}
+                )
+                synthesis_report = result["output"]
+                self._add_entry("status", {
+                    "entry_type": "synthesis_report",
+                    "content": synthesis_report.model_dump(),
+                })
+                obs_logger.log_event("stage_completed", session_id, {"stage": "synthesizer", "status": "success"})
+            except Exception as e:
+                errors.append(f"synthesizer: {e}")
+                synthesis_report = _build_placeholder_synthesis_report(
+                    research_context.research_question
+                )
+                obs_logger.log_event("stage_failed", session_id, {"stage": "synthesizer", "error": str(e)})
+        else:
             synthesis_report = _build_placeholder_synthesis_report(
                 research_context.research_question
             )
-            obs_logger.log_event("stage_failed", session_id, {"stage": "synthesizer", "error": str(e)})
+            obs_logger.log_event("stage_skipped", session_id, {"stage": "synthesizer"})
 
         # ── Stage 5b: Corpus retrieval (before critic) ──
         try:
@@ -218,33 +250,41 @@ class ThesisOrchestrator:
 
         # ── Stage 6: Critic ──
         critique: Optional[CritiqueResult] = None
-        try:
-            result = await self.critic.execute(
-                task, {"blackboard_entries": self._get_entries()}
-            )
-            critique = result["output"]
-            self._add_entry("critique", critique.model_dump())
-            obs_logger.log_event("stage_completed", session_id, {"stage": "critic", "status": "success"})
-        except Exception as e:
-            errors.append(f"critic: {e}")
+        if route.activate_critic:
+            try:
+                result = await self.critic.execute(
+                    task, {"blackboard_entries": self._get_entries()}
+                )
+                critique = result["output"]
+                self._add_entry("critique", critique.model_dump())
+                obs_logger.log_event("stage_completed", session_id, {"stage": "critic", "status": "success"})
+            except Exception as e:
+                errors.append(f"critic: {e}")
+                critique = _build_placeholder_critique_result()
+                obs_logger.log_event("stage_failed", session_id, {"stage": "critic", "error": str(e)})
+        else:
             critique = _build_placeholder_critique_result()
-            obs_logger.log_event("stage_failed", session_id, {"stage": "critic", "error": str(e)})
+            obs_logger.log_event("stage_skipped", session_id, {"stage": "critic"})
 
         # ── Stage 7: HEAD final pass (supervisor) ──
         final_critique: Optional[CritiqueResult] = None
-        try:
-            result = await self.head.execute(
-                task,
-                {"blackboard_entries": self._get_entries()},
-                mode="supervisor",
-            )
-            final_critique = result["output"]
-            self._add_entry("critique", final_critique.model_dump())
-            obs_logger.log_event("stage_completed", session_id, {"stage": "head_supervisor", "status": "success"})
-        except Exception as e:
-            errors.append(f"head_supervisor: {e}")
+        if route.activate_head_supervisor:
+            try:
+                result = await self.head.execute(
+                    task,
+                    {"blackboard_entries": self._get_entries()},
+                    mode="supervisor",
+                )
+                final_critique = result["output"]
+                self._add_entry("critique", final_critique.model_dump())
+                obs_logger.log_event("stage_completed", session_id, {"stage": "head_supervisor", "status": "success"})
+            except Exception as e:
+                errors.append(f"head_supervisor: {e}")
+                final_critique = _build_placeholder_critique_result()
+                obs_logger.log_event("stage_failed", session_id, {"stage": "head_supervisor", "error": str(e)})
+        else:
             final_critique = _build_placeholder_critique_result()
-            obs_logger.log_event("stage_failed", session_id, {"stage": "head_supervisor", "error": str(e)})
+            obs_logger.log_event("stage_skipped", session_id, {"stage": "head_supervisor"})
 
         # ── Stage 8: Assemble ResearchSession ──
         elapsed_ms = int((time.time() - start_time) * 1000)
@@ -262,6 +302,9 @@ class ThesisOrchestrator:
 
         # ── Store episode in memory ──
         try:
+            agent_agents = route.agents_to_run()
+            middle_agents = [a for a in agent_agents if a in ("checker", "synthesizer")]
+            worker_agents = [a for a in agent_agents if a == "researcher"]
             episode = MemoryEpisode(
                 episode_id=str(uuid.uuid4()),
                 timestamp=datetime.utcnow().isoformat() + "Z",
@@ -269,16 +312,17 @@ class ThesisOrchestrator:
                 task_type="thesis",
                 privacy_tier="public",
                 route=EpisodeRoute(
-                    head_direct=False,
-                    used_middle_tier=True,
-                    used_worker_swarm=True,
+                    head_direct=not route.activate_researcher and not route.activate_checker
+                    and not route.activate_synthesizer and not route.activate_critic,
+                    used_middle_tier=bool(middle_agents),
+                    used_worker_swarm=bool(worker_agents),
                     used_mcp_tools=list(self.tool_registry._tools.keys()) if self.tool_registry else [],
-                    spawn_count=5,
+                    spawn_count=len(agent_agents),
                 ),
                 models=EpisodeModels(
                     head="thesis_head",
-                    middle=["checker", "synthesizer"],
-                    workers=["researcher"],
+                    middle=middle_agents,
+                    workers=worker_agents,
                 ),
                 metrics=EpisodeMetrics(
                     latency_ms=elapsed_ms,

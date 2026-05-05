@@ -1,7 +1,9 @@
 import json
 import re
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Type, Callable
+
+from pydantic import BaseModel
 
 from core.schemas import (
     Task,
@@ -69,6 +71,33 @@ def _parse_json_response(text: str) -> Dict[str, Any]:
 
     logger.warning(f"Could not parse JSON from LLM response: {text[:200]}...")
     return {"_parse_error": True, "raw": text[:500]}
+
+
+def _parse_structured_output(
+    text: str,
+    model_cls: Type[BaseModel],
+    dict_converter: Callable[[Dict[str, Any]], Any],
+) -> Any:
+    """Pydantic model_validate_json first; legacy dict parser as fallback."""
+    if not text or not text.strip():
+        return dict_converter({})
+
+    cleaned = text.strip()
+
+    fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+    if fenced:
+        cleaned = fenced.group(1).strip()
+
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+
+    for attempt in (cleaned, cleaned.replace("'", '"')):
+        try:
+            return model_cls.model_validate_json(attempt)
+        except Exception:
+            continue
+
+    parsed_dict = _parse_json_response(cleaned)
+    return dict_converter(parsed_dict)
 
 
 def _build_placeholder_research_plan(question: str) -> ResearchPlan:
@@ -157,8 +186,7 @@ class ThesisHeadProvider:
             question = task.research_context.research_question if task.research_context else task.description
             plan = _build_placeholder_research_plan(question)
         else:
-            parsed = _parse_json_response(response.content)
-            plan = _dict_to_research_plan(parsed)
+            plan = _parse_structured_output(response.content, ResearchPlan, _dict_to_research_plan)
 
         return {
             "tier": "head",
@@ -183,8 +211,7 @@ class ThesisHeadProvider:
         if response.dry_run:
             critique = _build_placeholder_critique_result()
         else:
-            parsed = _parse_json_response(response.content)
-            critique = _dict_to_critique_result(parsed)
+            critique = _parse_structured_output(response.content, CritiqueResult, _dict_to_critique_result)
 
         return {
             "tier": "head",
@@ -219,8 +246,7 @@ class ResearcherAgent:
         if response.dry_run:
             lit_map = _build_placeholder_lit_map(question)
         else:
-            parsed = _parse_json_response(response.content)
-            lit_map = _dict_to_lit_map(parsed)
+            lit_map = _parse_structured_output(response.content, LitMap, _dict_to_lit_map)
 
         return {
             "agent": "researcher",
@@ -254,8 +280,7 @@ class CheckerAgent:
         if response.dry_run:
             audit = _build_placeholder_citation_audit()
         else:
-            parsed = _parse_json_response(response.content)
-            audit = _dict_to_citation_audit(parsed)
+            audit = _parse_structured_output(response.content, CitationAudit, _dict_to_citation_audit)
 
         return {
             "agent": "checker",
@@ -290,8 +315,7 @@ class SynthesizerAgent:
             question = task.research_context.research_question if task.research_context else ""
             report = _build_placeholder_synthesis_report(question)
         else:
-            parsed = _parse_json_response(response.content)
-            report = _dict_to_synthesis_report(parsed)
+            report = _parse_structured_output(response.content, SynthesisReport, _dict_to_synthesis_report)
 
         return {
             "agent": "synthesizer",
@@ -325,8 +349,7 @@ class CriticAgent:
         if response.dry_run:
             critique = _build_placeholder_critique_result()
         else:
-            parsed = _parse_json_response(response.content)
-            critique = _dict_to_critique_result(parsed)
+            critique = _parse_structured_output(response.content, CritiqueResult, _dict_to_critique_result)
 
         return {
             "agent": "critic",
