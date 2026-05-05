@@ -92,6 +92,28 @@ class ResearchSession(BaseModel):
     created_at: str
     status: str = "complete"
 
+class CorpusSection(BaseModel):
+    section_id: str
+    thesis_id: str
+    thesis_title: str
+    discipline: str
+    university: str = ""
+    year: int = 0
+    section_type: str = ""  # introduction | methodology | literature_review | results | discussion | conclusion
+    heading: str = ""
+    text: str
+    word_count: int = 0
+    citation_count: int = 0
+
+class CorpusStats(BaseModel):
+    discipline: str
+    thesis_count: int = 0
+    section_stats: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+class CorpusContext(BaseModel):
+    similar_sections: List[CorpusSection] = Field(default_factory=list)
+    benchmarks: Optional[CorpusStats] = None
+
 class Task(BaseModel):
     task_id: str
     task_type: str = ""

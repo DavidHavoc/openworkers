@@ -41,6 +41,7 @@ from providers.thesis_agents import (
     _build_placeholder_research_plan,
 )
 from core.orchestrator.compiler import PromptCompiler
+from core.corpus.analyze import CorpusAnalyzer
 from core.observability.metrics import obs_logger
 
 
@@ -65,6 +66,7 @@ class ThesisOrchestrator:
         self.checker = CheckerAgent(unified=unified, compiler=self.compiler)
         self.synthesizer = SynthesizerAgent(unified=unified, compiler=self.compiler)
         self.critic = CriticAgent(unified=unified, compiler=self.compiler)
+        self.corpus = CorpusAnalyzer()
 
     def _add_entry(self, entry_type: str, content: Dict[str, Any]) -> Optional[BlackboardEntry]:
         try:
@@ -193,6 +195,26 @@ class ThesisOrchestrator:
                 research_context.research_question
             )
             obs_logger.log_event("stage_failed", session_id, {"stage": "synthesizer", "error": str(e)})
+
+        # ── Stage 5b: Corpus retrieval (before critic) ──
+        try:
+            corpus_ctx = self.corpus.analyze(
+                query=research_context.research_question,
+                discipline=research_context.discipline,
+            )
+            benchmarks_text = self.corpus.format_benchmarks_for_prompt(
+                corpus_ctx,
+                student_wc=len(research_context.topic_summary.split()),
+            )
+            self._add_entry("corpus_benchmarks", {
+                "benchmarks_text": benchmarks_text,
+                "thesis_count": corpus_ctx.benchmarks.thesis_count if corpus_ctx.benchmarks else 0,
+                "similar_sections": len(corpus_ctx.similar_sections),
+            })
+            obs_logger.log_event("stage_completed", session_id, {"stage": "corpus_retrieval", "status": "success"})
+        except Exception as e:
+            errors.append(f"corpus_retrieval: {e}")
+            obs_logger.log_event("stage_failed", session_id, {"stage": "corpus_retrieval", "error": str(e)})
 
         # ── Stage 6: Critic ──
         critique: Optional[CritiqueResult] = None

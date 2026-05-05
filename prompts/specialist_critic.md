@@ -16,6 +16,8 @@ Generate counterarguments, identify missing work, analyze weaknesses, and propos
 
 {{ memory_guidance }}
 
+{{ corpus_benchmarks }}
+
 ## Output: CritiqueResult (JSON)
 Return a JSON object with this exact schema.
 

@@ -137,10 +137,30 @@ async def cmd_resume(args):
 
 
 async def cmd_corpus(args):
-    print(f"Corpus ingest: {args.path}")
-    print(f"  Discipline: {args.discipline}")
-    print(f"  (Phase 11 — not yet implemented)")
-    return {"status": "not_implemented", "path": args.path, "discipline": args.discipline}
+    from core.corpus.ingest import CorpusIngest
+    ingester = CorpusIngest()
+    sections = ingester.ingest_pdf(
+        filepath=args.path,
+        title=args.title or os.path.basename(args.path),
+        discipline=args.discipline,
+        university=args.university or "",
+        year=args.year or 0,
+    )
+    summary = {
+        "status": "ingested",
+        "path": args.path,
+        "discipline": args.discipline,
+        "sections": len(sections),
+        "section_types": list(set(s.section_type for s in sections)),
+    }
+    if args.format == "json":
+        _output(summary, "json", args.output)
+    else:
+        print(f"Ingested: {args.path}")
+        print(f"  Discipline: {args.discipline}")
+        print(f"  Sections: {len(sections)}")
+        print(f"  Types: {summary['section_types']}")
+    return summary
 
 
 def add_output_args(p):
@@ -186,6 +206,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_corpus = sub.add_parser("corpus", help="Add a thesis to the corpus")
     p_corpus.add_argument("path", type=str, help="Path to PDF or text file")
     p_corpus.add_argument("--discipline", type=str, default="general")
+    p_corpus.add_argument("--title", type=str, default="", help="Thesis title")
+    p_corpus.add_argument("--university", type=str, default="", help="University")
+    p_corpus.add_argument("--year", type=int, default=0, help="Year of publication")
     add_output_args(p_corpus)
 
     return parser

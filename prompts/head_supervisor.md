@@ -26,6 +26,8 @@ Never generate free-text prose for the critique - output structured data only.
 
 {{ memory_guidance }}
 
+{{ corpus_benchmarks }}
+
 ## Output: CritiqueResult (JSON)
 Return a JSON object with this exact schema.
 

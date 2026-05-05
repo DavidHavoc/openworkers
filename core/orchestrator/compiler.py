@@ -45,6 +45,7 @@ class PromptCompiler:
         citation_audit_entries: List[Dict[str, Any]] = []
         synthesis_entries: List[Dict[str, Any]] = []
         lit_search_entries: List[Dict[str, Any]] = []
+        corpus_benchmark_entries: List[str] = []
 
         for entry in entries:
             content = entry.content or {}
@@ -84,6 +85,10 @@ class PromptCompiler:
                 lit_search_entries.append(content)
             elif entry_type == "status" and content.get("entry_type") == "synthesis_report":
                 synthesis_entries.append(content)
+            elif entry_type == "corpus_benchmarks":
+                bm = content.get("benchmarks_text", "")
+                if bm:
+                    corpus_benchmark_entries.append(bm)
 
         def _fmt_json(obj: Any) -> str:
             if not obj:
@@ -115,6 +120,7 @@ class PromptCompiler:
             indent=2,
         ) if lit_search_entries else "No search queries yet."
         context["draft_claims"] = _fmt_section("DRAFT CLAIMS", evidence_refs) or "No claims to check."
+        context["corpus_benchmarks"] = "\n".join(corpus_benchmark_entries) if corpus_benchmark_entries else "No corpus data available."
 
         context["max_searches"] = str(5)
         context["max_papers_per_search"] = str(10)
