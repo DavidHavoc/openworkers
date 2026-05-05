@@ -54,6 +54,97 @@ def test_heuristic_routing_complexity():
     assert decision.workers_allowed is True
     assert decision.middle_allowed is True
 
+
+def test_router_provider_map_defaults(monkeypatch):
+    """provider_map has all three modes with sensible defaults when env vars are unset."""
+    monkeypatch.delenv("THESIS_QUALITY_PROVIDER", raising=False)
+    monkeypatch.delenv("THESIS_QUALITY_MODEL", raising=False)
+    monkeypatch.delenv("THESIS_BALANCED_PROVIDER", raising=False)
+    monkeypatch.delenv("THESIS_BALANCED_MODEL", raising=False)
+    monkeypatch.delenv("THESIS_CHEAP_PROVIDER", raising=False)
+    monkeypatch.delenv("THESIS_CHEAP_MODEL", raising=False)
+
+    router = Router()
+    route = router.route_thesis_task(phase="full")
+
+    assert set(route.provider_map.keys()) == {"quality", "balanced", "cheap"}
+    assert route.provider_map["quality"] == ("anthropic", "claude-sonnet-4-20250514")
+    assert route.provider_map["balanced"] == ("openai", "gpt-4o-mini")
+    assert route.provider_map["cheap"] == ("deepseek", "deepseek-chat")
+
+
+def test_router_provider_map_env_vars(monkeypatch):
+    """provider_map reflects custom env var overrides per mode."""
+    monkeypatch.setenv("THESIS_QUALITY_PROVIDER", "anthropic")
+    monkeypatch.setenv("THESIS_QUALITY_MODEL", "claude-opus-4")
+    monkeypatch.setenv("THESIS_BALANCED_PROVIDER", "openai")
+    monkeypatch.setenv("THESIS_BALANCED_MODEL", "gpt-4o")
+    monkeypatch.setenv("THESIS_CHEAP_PROVIDER", "deepseek")
+    monkeypatch.setenv("THESIS_CHEAP_MODEL", "deepseek-v3")
+
+    router = Router()
+    route = router.route_thesis_task(phase="full")
+
+    assert route.provider_map["quality"] == ("anthropic", "claude-opus-4")
+    assert route.provider_map["balanced"] == ("openai", "gpt-4o")
+    assert route.provider_map["cheap"] == ("deepseek", "deepseek-v3")
+
+
+def test_router_provider_map_partial_env(monkeypatch):
+    """Modes without env vars fall back to defaults; modes with env vars use them."""
+    monkeypatch.delenv("THESIS_QUALITY_PROVIDER", raising=False)
+    monkeypatch.delenv("THESIS_QUALITY_MODEL", raising=False)
+    monkeypatch.setenv("THESIS_CHEAP_PROVIDER", "openai")
+    monkeypatch.setenv("THESIS_CHEAP_MODEL", "gpt-4o-mini")
+
+    router = Router()
+    route = router.route_thesis_task(phase="full")
+
+    assert route.provider_map["quality"] == ("anthropic", "claude-sonnet-4-20250514")
+    assert route.provider_map["cheap"] == ("openai", "gpt-4o-mini")
+
+
+def test_router_fallback_chain(monkeypatch):
+    """provider_fallback lists the preferred provider first, then all others."""
+    monkeypatch.delenv("THESIS_QUALITY_PROVIDER", raising=False)
+    monkeypatch.delenv("THESIS_QUALITY_MODEL", raising=False)
+
+    router = Router()
+    route = router.route_thesis_task(phase="full")
+
+    # Default preferred is anthropic → [anthropic, openai, deepseek]
+    assert route.provider_fallback["quality"] == ["anthropic", "openai", "deepseek"]
+    assert route.provider_fallback["balanced"] == ["openai", "anthropic", "deepseek"]
+    assert route.provider_fallback["cheap"] == ["deepseek", "anthropic", "openai"]
+
+
+def test_router_fallback_unavailable_preferred(monkeypatch):
+    """Fallback chain includes all known providers even when preferred is unrecognized."""
+    monkeypatch.setenv("THESIS_QUALITY_PROVIDER", "nonexistent")
+    monkeypatch.setenv("THESIS_QUALITY_MODEL", "v1")
+
+    router = Router()
+    route = router.route_thesis_task(phase="full")
+
+    assert route.provider_map["quality"] == ("nonexistent", "v1")
+    assert route.provider_fallback["quality"] == ["anthropic", "openai", "deepseek"]
+
+
+def test_router_privacy_trusted_forces_head_only(monkeypatch):
+    """Privacy tier 'trusted' activates only head agents regardless of phase."""
+    router = Router()
+    route = router.route_thesis_task(phase="full", privacy_tier="trusted")
+
+    assert route.activate_head_planner is True
+    assert route.activate_head_supervisor is True
+    assert route.activate_researcher is False
+    assert route.activate_checker is False
+    assert route.activate_synthesizer is False
+    assert route.activate_critic is False
+    assert "trusted" in route.reason.lower()
+    assert len(route.provider_map) == 3
+
+
 def test_memory_retrieval():
     memory = EpisodicMemory(qdrant_location=":memory:")
     from core.schemas import MemoryEpisode, EpisodeRoute, EpisodeModels, EpisodeMetrics, EpisodeQuality

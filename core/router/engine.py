@@ -1,8 +1,16 @@
 import os
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 from core.schemas import RouteDecision, Task, MemoryBrief, BudgetState, BlackboardEntry
+
+_ALL_PROVIDERS = ("anthropic", "openai", "deepseek")
+
+_MODE_DEFAULTS: Dict[str, Tuple[str, str]] = {
+    "quality": ("anthropic", "claude-sonnet-4-20250514"),
+    "balanced": ("openai", "gpt-4o-mini"),
+    "cheap": ("deepseek", "deepseek-chat"),
+}
 
 
 @dataclass
@@ -15,7 +23,8 @@ class ThesisRoute:
     activate_synthesizer: bool = False
     activate_critic: bool = False
     reason: str = ""
-    provider_map: Dict[str, tuple[str, str]] = field(default_factory=dict)
+    provider_map: Dict[str, Tuple[str, str]] = field(default_factory=dict)
+    provider_fallback: Dict[str, List[str]] = field(default_factory=dict)
 
     def agents_to_run(self) -> List[str]:
         agents: List[str] = []
@@ -34,13 +43,28 @@ class ThesisRoute:
         return agents
 
 
-def _read_provider_for_mode(mode: str) -> tuple[str, str]:
+def _read_provider_for_mode(mode: str) -> Tuple[str, str]:
     key = mode.upper()
     provider = os.environ.get(f"THESIS_{key}_PROVIDER", "").strip().lower()
     model = os.environ.get(f"THESIS_{key}_MODEL", "").strip()
-    if not model and provider:
+    if not provider:
+        default = _MODE_DEFAULTS.get(mode)
+        if default:
+            return default
+        return ("openai", "gpt-4o-mini")
+    if not model:
         model = "unknown"
     return provider, model
+
+
+def _build_fallback_order(preferred: str) -> List[str]:
+    order: List[str] = []
+    if preferred in _ALL_PROVIDERS:
+        order.append(preferred)
+    for p in _ALL_PROVIDERS:
+        if p not in order:
+            order.append(p)
+    return order
 
 
 class Router:
@@ -110,12 +134,14 @@ class Router:
         reasons: List[str] = []
 
         if privacy_tier == "trusted":
+            pmap, pfallback = self._build_provider_map()
             return ThesisRoute(
                 phase=phase,
                 activate_head_planner=True,
                 activate_head_supervisor=True,
                 reason="Privacy tier 'trusted': head only, no external API calls.",
-                provider_map=self._build_provider_map(),
+                provider_map=pmap,
+                provider_fallback=pfallback,
             )
 
         route = ThesisRoute(phase=phase)
@@ -156,14 +182,15 @@ class Router:
             reasons.append(f"unknown phase '{phase}': defaulted to head only")
 
         route.reason = " | ".join(reasons)
-        route.provider_map = self._build_provider_map()
+        route.provider_map, route.provider_fallback = self._build_provider_map()
 
         return route
 
-    def _build_provider_map(self) -> Dict[str, tuple[str, str]]:
-        provider_map: Dict[str, tuple[str, str]] = {}
+    def _build_provider_map(self) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, List[str]]]:
+        provider_map: Dict[str, Tuple[str, str]] = {}
+        fallback: Dict[str, List[str]] = {}
         for mode in ("quality", "balanced", "cheap"):
-            p, m = _read_provider_for_mode(mode)
-            if p and m:
-                provider_map[mode] = (p, m)
-        return provider_map
+            provider, model = _read_provider_for_mode(mode)
+            provider_map[mode] = (provider, model)
+            fallback[mode] = _build_fallback_order(provider)
+        return provider_map, fallback

@@ -122,13 +122,14 @@ STUDENT OUTPUT
 ```
 
 ## Tech Stack
-- **Python 3.12**, **Pydantic** - type-safe data models
+- **Python 3.12**, **Pydantic** - type-safe data models, structured LLM output parsing
+- **httpx** - async HTTP for MCP tools (arXiv, Semantic Scholar, CrossRef)
 - **Qdrant** + **FastEmbed** - episodic memory + thesis corpus
 - **Redis** - shared state via blackboard
 - **Unified LLM Interface** - routing layer with policy engine, fallback, budget controls, health checks
 - **Provider Adapters** - Anthropic, OpenAI, DeepSeek (pluggable)
 - **MCP tools** - arXiv, Semantic Scholar, CrossRef APIs
-- **Docker Compose** & **pytest**
+- **Docker Compose** & **pytest** (19 tests)
 
 ## Usage
 
@@ -203,8 +204,9 @@ pytest tests/ -v
 ## Implementation Roadmap
 
 | Phase | What |
-|---|---|---|
+|---|---|
 | 1 | Data models (ResearchContext, LitMap, CritiqueResult, etc.) |
+| 1-fix | **Done** — Bug fixes: router provider fallback defaults, blackboard recursion, httpx migration, structured JSON parsing |
 | 2 | Academic MCP tools (arXiv, Semantic Scholar, CrossRef) |
 | 3 | System prompt templates (HEAD planner/supervisor + 4 specialists) |
 | 4 | Unified LLM Interface (routing layer, policy, fallback, budget) |
@@ -215,6 +217,12 @@ pytest tests/ -v
 | 9 | CLI tool |
 | 10 | MCP server (OpenCode + Claude Code) |
 | 11 | Thesis corpus learning |
+
+### Phase 1 fixes (May 2026)
+- **Router** — provider_map now uses default fallback values (quality→anthropic, balanced→openai, cheap→deepseek) so routing works without env vars. Added `provider_fallback` chain per mode.
+- **Blackboard** — fixed infinite recursion in `_get_entries()` that silently returned empty lists, breaking inter-agent context sharing.
+- **JSON parsing** — replaced fragile multi-fallback `_parse_json_response` with Pydantic `model_validate_json()` as primary path, preserving regex fallback.
+- **HTTP** — migrated MCP tools and seed script from synchronous `urllib.request` to `httpx` (async in tools, sync in scripts). Promoted `httpx` to core dependency.
 
 ## Architecture
 
