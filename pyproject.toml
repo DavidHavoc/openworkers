@@ -28,6 +28,7 @@ dev = [
 
 [project.scripts]
 thesis = "apps.cli.main:main"
+thesis-mcp = "apps.mcp_server.main:main"
 
 [build-system]
 requires = ["hatchling"]
