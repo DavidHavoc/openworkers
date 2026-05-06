@@ -26,110 +26,29 @@ Outputs delivered to the student:
 
 ## Architecture
 
+The thesis assistant runs as a pipeline: HEAD plans the work → specialists generate structured artifacts on a shared blackboard → HEAD reviews and critiques the assembled output.
+
 ```
-STUDENT
-  submits: research question, draft, claim to verify, topic to map
-        |
-        v
-┌──────────────────────────────┐
-│ API / Session Layer          │
-│ - request intake             │
-│ - auth/session               │
-│ - task creation              │
-└──────────────┬───────────────┘
-               v
-┌──────────────────────────────┐
-│ HEAD SUPERVISOR  (first pass)│
-│ - understands goal           │
-│ - plans research strategy    │
-│ - defines subquestions       │
-│ - sets budgets               │
-│ - decides route              │
-└───────┬───────────┬──────────┘
-        |           |
-        |           v
-        |    ┌──────────────────────┐
-        |    │ MEMORY LAYER         │
-        |    │ - episodic memory    │
-        |    │ - route outcomes     │
-        |    │ - failure patterns   │
-        |    └──────────┬───────────┘
-        |               |
-        v               v
-┌────────────────────────────────────┐
-│ ROUTING / POLICY LAYER             │
-│ - provider-agnostic model routing  │
-│ - privacy checks                   │
-│ - budget checks                    │
-│ - confidence thresholds            │
-│ - fallback logic                   │
-└───────┬──────────────┬─────────────┘
-        |              |
-        |              v
-        |      ┌────────────────────┐
-        |      │ MCP TOOL LAYER     │
-        |      │ - arXiv            │
-        |      │ - Semantic Scholar │
-        |      │ - Crossref         │
-        |      │ - local corpus     │
-        |      │ - notes / files    │
-        |      └────────────────────┘
-        |
-        v
-┌─────────────────────────────────────────────────────┐
-│ SPECIALIST AGENTS                                   │
-│                                                     │
-│ 1. Researcher                                       │
-│    - search papers, collect metadata, retrieve      │
-│      abstracts and sources                          │
-│                                                     │
-│ 2. Checker                                          │
-│    - verify citations, detect contradictions,       │
-│      flag weak evidence                             │
-│                                                     │
-│ 3. Synthesizer                                      │
-│    - extract methods / datasets / metrics           │
-│    - corpus comparison (section lengths, etc)       │
-│                                                     │
-│ 4. Critic                                           │
-│    - counterarguments, missing work, weakness       │
-│      analysis, alternative framings                 │
-└──────────────────────┬──────────────────────────────┘
-                       v
-┌────────────────────────────────────┐
-│ SHARED STATE / BLACKBOARD          │
-│ - paper IDs, DOI refs              │
-│ - evidence refs, quality scores    │
-│ - contradictions, route trace      │
-└──────────────────────┬─────────────┘
-                       v
-┌────────────────────────────────────┐
-│ HEAD SUPERVISOR  (final pass)      │
-│ - merges findings                  │
-│ - critiques draft                  │
-│ - decides confidence               │
-│ - creates student output           │
-└──────────────────────┬─────────────┘
-                       v
-STUDENT OUTPUT
-- literature map
-- verified citations
-- contradiction warnings
-- benchmark / dataset summary
-- critique of argument
-- what is missing
-- next reading suggestions
+Student → CLI/MCP → HEAD Planner → [Blackboard]
+                                  → Researcher (lit search)
+                                  → Checker (citation audit)
+                                  → Synthesizer (methods, corpus benchmarks)
+                                  → Critic (counterarguments, gaps)
+                                  → HEAD Supervisor (final review)
+                                  → ResearchSession
 ```
 
+All agents call through a single UnifiedLLM router that maps quality/balanced/cheap modes to Claude, ChatGPT, or DeepSeek. MCP tools (arXiv, Semantic Scholar, CrossRef) run without LLM involvement. Thesis corpus benchmarks make critiques data-driven — "your methodology is 200 words; CS theses average 1,100."
+
+See [docs/architecture.md](docs/architecture.md) for the full Mermaid diagram and pipeline stage details.
+
 ## Tech Stack
-- **Python 3.12**, **Pydantic** - type-safe data models, structured LLM output parsing
-- **httpx** - async HTTP for MCP tools (arXiv, Semantic Scholar, CrossRef)
-- **Qdrant** + **FastEmbed** - episodic memory + thesis corpus
-- **Redis** - shared state via blackboard
-- **Unified LLM Interface** - routing layer with policy engine, fallback, budget controls, health checks
-- **Provider Adapters** - Anthropic, OpenAI, DeepSeek (pluggable)
-- **MCP tools** - arXiv, Semantic Scholar, CrossRef APIs
-- **Docker Compose** & **pytest** (19 tests)
+- **Python 3.9+**, **Pydantic** — data models and structured output parsing
+- **Redis** — blackboard shared state
+- **Qdrant** + **FastEmbed** — episodic memory and thesis corpus
+- **UnifiedLLM** — provider-agnostic routing (Claude, ChatGPT, DeepSeek)
+- **MCP tools** — arXiv, Semantic Scholar, CrossRef (stdlib HTTP, no LLM)
+- **pymupdf** — PDF extraction for corpus ingest
 
 ## Usage
 
@@ -231,11 +150,11 @@ DRY_RUN=false
 
 # Single Anthropic (set real model names)
 THESIS_QUALITY_PROVIDER=anthropic
-THESIS_QUALITY_MODEL=claude-sonnet-4-20250514
+THESIS_QUALITY_MODEL=claude-opus
 THESIS_BALANCED_PROVIDER=anthropic
-THESIS_BALANCED_MODEL=claude-haiku-4-5-20250514
+THESIS_BALANCED_MODEL=claude-sonnet
 THESIS_CHEAP_PROVIDER=anthropic
-THESIS_CHEAP_MODEL=claude-haiku-4-5-20250514
+THESIS_CHEAP_MODEL=claude-haiku
 ```
 
 The three modes control which model each agent uses:
@@ -278,58 +197,33 @@ DRY_RUN=false
 
 # Single Anthropic (set real model names)
 THESIS_QUALITY_PROVIDER=anthropic
-THESIS_QUALITY_MODEL=claude-opus
+THESIS_QUALITY_MODEL=claude-sonnet-4-20250514
 THESIS_BALANCED_PROVIDER=anthropic
-THESIS_BALANCED_MODEL=claude-sonnet
+THESIS_BALANCED_MODEL=claude-haiku-4-5-20250514
 THESIS_CHEAP_PROVIDER=anthropic
-THESIS_CHEAP_MODEL=claude-haiku
+THESIS_CHEAP_MODEL=claude-haiku-4-5-20250514
 ```
 
 The three modes control which model each agent uses:
 
-| Mode | Agent | Typical model |
-|---|---|---|
-| `quality` | HEAD planner, HEAD supervisor, critic | stronger model |
-| `balanced` | checker, synthesizer | mid model |
-| `cheap` | researcher | cheaper/faster model |
+| Mode | Agents |
+|---|---|
+| `quality` | HEAD planner, HEAD supervisor, critic |
+| `balanced` | checker, synthesizer |
+| `cheap` | researcher |
 
-Same provider with different models is fine (Anthropic Sonnet for quality, Haiku for balanced/cheap). Mixed providers also work.
+Same provider with different models per mode is fine (Claude Sonnet for quality, Claude Haiku for balanced and cheap). Mixed providers also work.
 
-**Dry run** — set `DRY_RUN=true` to skip API calls and test the pipeline locally with placeholder output. No API keys needed. The routing layer logs what it *would* have called.
-
-### Run
-
-```bash
-# Full research session
-python -m apps.cli.main research "your question" --discipline computer_science
-
-# Output as JSON
-python -m apps.cli.main research "your question" --format json
-
-# Save to file
-python -m apps.cli.main research "your question" --output session.json
-
-# Critique only
-python -m apps.cli.main critique "Social media causes depression"
-
-# Verify a citation
-python -m apps.cli.main verify "10.1038/nature14539"
-
-# Quick paper search (no LLM, pure API)
-python -m apps.cli.main papers "transformer attention mechanisms" --source arxiv --limit 5
-
-# Eval harness
-python core/evals/thesis_harness.py
-```
+**Dry run** — set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
 
 ### Tests
 
 ```bash
 pytest tests/ -v
+python -m core.evals.thesis_harness
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the tier breakdown.
-See [docs/examples.md](docs/examples.md) for output format samples.
+See [docs/examples.md](docs/examples.md) for detailed output samples.
 
 ## Contributing
 
