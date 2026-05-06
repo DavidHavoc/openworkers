@@ -54,7 +54,7 @@ class LitMap(BaseModel):
     search_query_used: str
 
 class CritiqueResult(BaseModel):
-    """Structured critique — never prose generation."""
+    """Structured critique  -  never prose generation."""
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
     gaps: List[str] = Field(default_factory=list)

@@ -51,12 +51,12 @@ scripts/
 
 ## Code conventions
 
-- **Pydantic models** for all data structures — never pass raw dicts between agents
-- **Async everywhere** — all agent execution and API calls use `async/await`
-- **Stdlib for MCP tools** — `urllib` only, no extra HTTP dependencies
-- **Errors surface in response** — pipeline stages catch exceptions and add to `errors` list; never crash
-- **DRY_RUN** — all agents produce placeholder output when `DRY_RUN=true`. Test new features in DRY_RUN before needing real API keys
-- **Logging** — use `obs_logger` for structured events; `logger.info/warning` for routing messages
+- **Pydantic models** for all data structures  -  never pass raw dicts between agents
+- **Async everywhere**  -  all agent execution and API calls use `async/await`
+- **Stdlib for MCP tools**  -  `urllib` only, no extra HTTP dependencies
+- **Errors surface in response**  -  pipeline stages catch exceptions and add to `errors` list; never crash
+- **DRY_RUN**  -  all agents produce placeholder output when `DRY_RUN=true`. Test new features in DRY_RUN before needing real API keys
+- **Logging**  -  use `obs_logger` for structured events; `logger.info/warning` for routing messages
 
 ## Testing
 

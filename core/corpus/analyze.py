@@ -63,7 +63,7 @@ class CorpusAnalyzer:
             lines.append("\n## SIMILAR THESIS SECTIONS")
             for i, s in enumerate(context.similar_sections, 1):
                 lines.append(
-                    f"  {i}. [{s.year}] {s.thesis_title[:60]} — {s.section_type}"
+                    f"  {i}. [{s.year}] {s.thesis_title[:60]}  -  {s.section_type}"
                 )
                 lines.append(f"     {s.word_count} words, {s.citation_count} citations")
                 lines.append(f"     Excerpt: {s.text[:120].replace(chr(10), ' ')}...")

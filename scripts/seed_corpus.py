@@ -122,7 +122,7 @@ def seed_corpus(dry_run: bool = True):
     total_sections = 0
 
     for discipline, query in SEED_QUERIES.items():
-        print(f"Discipline: {discipline} — searching: '{query}'")
+        print(f"Discipline: {discipline}  -  searching: '{query}'")
         papers = _search_arxiv(query, max_results=2)
 
         for paper in papers:

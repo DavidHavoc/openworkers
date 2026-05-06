@@ -67,7 +67,7 @@ class ThesisEvalHarness:
                 {"doi": "10.1038/nature14539"}, "public"
             )
             if result.get("exists") and "Deep learning" in result.get("title", ""):
-                r.pass_("Known DOI verified — CrossRef tool returns correct metadata")
+                r.pass_("Known DOI verified  -  CrossRef tool returns correct metadata")
             elif not result.get("exists"):
                 r.fail(f"Known DOI 10.1038/nature14539 not found. API may be unavailable.")
             else:
@@ -244,7 +244,7 @@ class ThesisEvalHarness:
             max_ms = max(times) * 1000
 
             if avg_ms < 5000:
-                r.pass_(f"avg={avg_ms:.0f}ms min={min_ms:.0f}ms max={max_ms:.0f}ms — within 5s")
+                r.pass_(f"avg={avg_ms:.0f}ms min={min_ms:.0f}ms max={max_ms:.0f}ms  -  within 5s")
             else:
                 r.pass_(f"avg={avg_ms:.0f}ms min={min_ms:.0f}ms max={max_ms:.0f}ms")
         except Exception as e:
@@ -362,7 +362,7 @@ class ThesisEvalHarness:
         if not all_pass:
             for r in self.results:
                 if not r.passed:
-                    print(f"  FAIL: {r.name} — {r.detail}")
+                    print(f"  FAIL: {r.name}  -  {r.detail}")
         print("=" * 60)
 
         if all_pass:

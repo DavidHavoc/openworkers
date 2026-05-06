@@ -38,17 +38,17 @@ Student → CLI/MCP → HEAD Planner → [Blackboard]
                                   → ResearchSession
 ```
 
-All agents call through a single UnifiedLLM router that maps quality/balanced/cheap modes to Claude, ChatGPT, or DeepSeek. MCP tools (arXiv, Semantic Scholar, CrossRef) run without LLM involvement. Thesis corpus benchmarks make critiques data-driven — "your methodology is 200 words; CS theses average 1,100."
+All agents call through a single UnifiedLLM router that maps quality/balanced/cheap modes to Claude, ChatGPT, or DeepSeek. MCP tools (arXiv, Semantic Scholar, CrossRef) run without LLM involvement. Thesis corpus benchmarks make critiques data-driven \: "your methodology is 200 words; CS theses average 1,100."
 
 See [docs/architecture.md](docs/architecture.md) for the full Mermaid diagram and pipeline stage details.
 
 ## Tech Stack
-- **Python 3.9+**, **Pydantic** — data models and structured output parsing
-- **Redis** — blackboard shared state
-- **Qdrant** + **FastEmbed** — episodic memory and thesis corpus
-- **UnifiedLLM** — provider-agnostic routing (Claude, ChatGPT, DeepSeek)
-- **MCP tools** — arXiv, Semantic Scholar, CrossRef (stdlib HTTP, no LLM)
-- **pymupdf** — PDF extraction for corpus ingest
+- **Python 3.9+**, **Pydantic**  -  data models and structured output parsing
+- **Redis**  -  blackboard shared state
+- **Qdrant** + **FastEmbed**  -  episodic memory and thesis corpus
+- **UnifiedLLM**  -  provider-agnostic routing (Claude, ChatGPT, DeepSeek)
+- **MCP tools**  -  arXiv, Semantic Scholar, CrossRef (stdlib HTTP, no LLM)
+- **pymupdf**  -  PDF extraction for corpus ingest
 
 ## Usage
 
@@ -85,7 +85,7 @@ python -m apps.mcp_server.main
 
 Four tools are registered: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`.
 
-**OpenCode** — add to your OpenCode config (e.g. `~/.config/opencode/mcp_servers.json`):
+**OpenCode**  -  add to your OpenCode config (e.g. `~/.config/opencode/mcp_servers.json`):
 
 ```json
 {
@@ -99,7 +99,7 @@ Four tools are registered: `thesis_research`, `thesis_critique`, `thesis_verify_
 }
 ```
 
-**Claude Code** — register the server:
+**Claude Code**  -  register the server:
 
 ```bash
 claude mcp add thesis-assistant -- python -m apps.mcp_server.main
@@ -109,7 +109,7 @@ Make sure your `.env` is configured with API keys before starting the server. Se
 
 ### API Server
 
-A FastAPI stub is available at `apps/api/main.py`. It provides a `/health` endpoint and a `/tasks/` stub — not wired to the full pipeline yet. Useful as a foundation or for health-check monitoring:
+A FastAPI stub is available at `apps/api/main.py`. It provides a `/health` endpoint and a `/tasks/` stub  -  not wired to the full pipeline yet. Useful as a foundation or for health-check monitoring:
 
 ```bash
 uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
@@ -119,7 +119,7 @@ Then `curl http://localhost:8000/health` returns `{"status":"ok"}`.
 
 ## Setup
 
-**Prerequisites:** Python 3.9+, Redis (for blackboard state). Qdrant runs embedded — no server needed.
+**Prerequisites:** Python 3.9+, Redis (for blackboard state). Qdrant runs embedded  -  no server needed.
 
 ### Install
 
@@ -139,7 +139,7 @@ Copy the example and open it:
 cp .env.example .env
 ```
 
-**Required** — pick ONE provider section, uncomment it, fill in real values:
+**Required**  -  pick ONE provider section, uncomment it, fill in real values:
 
 ```env
 # API keys (set the one matching your chosen provider)
@@ -167,7 +167,7 @@ The three modes control which model each agent uses:
 
 Same provider with different models is fine. Mixed providers also work.
 
-**Dry run** — set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
+**Dry run**  -  set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
 
 ### Tests
 
@@ -186,7 +186,7 @@ Copy the example and open it:
 cp .env.example .env
 ```
 
-**Required** — pick ONE provider section, uncomment it, fill in real values:
+**Required**  -  pick ONE provider section, uncomment it, fill in real values:
 
 ```env
 # API keys (set the one matching your chosen provider)
@@ -197,11 +197,11 @@ DRY_RUN=false
 
 # Single Anthropic (set real model names)
 THESIS_QUALITY_PROVIDER=anthropic
-THESIS_QUALITY_MODEL=claude-sonnet-4-20250514
+THESIS_QUALITY_MODEL=claude-opus
 THESIS_BALANCED_PROVIDER=anthropic
-THESIS_BALANCED_MODEL=claude-haiku-4-5-20250514
-THESIS_CHEAP_PROVIDER=anthropic
-THESIS_CHEAP_MODEL=claude-haiku-4-5-20250514
+THESIS_BALANCED_MODEL=claude-sonnet
+THESIS_CHEAP_PROVIDER=anthropic / deepseek
+THESIS_CHEAP_MODEL=claude-haiku/ deepseek
 ```
 
 The three modes control which model each agent uses:
@@ -214,7 +214,7 @@ The three modes control which model each agent uses:
 
 Same provider with different models per mode is fine (Claude Sonnet for quality, Claude Haiku for balanced and cheap). Mixed providers also work.
 
-**Dry run** — set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
+**Dry run**  -  set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
 
 ### Tests
 
@@ -231,4 +231,4 @@ We welcome contributions from the community: bug fixes, documentation improvemen
 
 ## License
 
-MIT — DavidHavoc, 2026
+MIT  -  DavidHavoc, 2026

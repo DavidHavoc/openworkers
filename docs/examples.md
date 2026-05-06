@@ -47,7 +47,7 @@ Total Found: 12 | Query: social media anxiety adolescents
 Claims Checked: 8 | Verified: 6
 
 Missing Citations (1):
-  - "social media causes anxiety" — no source for causal claim
+  - "social media causes anxiety"  -  no source for causal claim
 
 Weak Citations (1):
   - Source 10.1016/socialmedia.2019 exists but reports screen time,
@@ -72,7 +72,7 @@ Research Question: Does social media use increase anxiety in adolescents?
   consensus_findings:
     - Screen time correlates with anxiety at r=0.15-0.25
   knowledge_gaps:
-    - Mechanism is unclear — social comparison vs. sleep displacement
+    - Mechanism is unclear  -  social comparison vs. sleep displacement
 
 === CRITIQUE ===
 
@@ -154,7 +154,7 @@ DOI NOT FOUND (does not exist)
 
 ## Quick paper search
 
-No LLM involved — pure API call.
+No LLM involved  -  pure API call.
 
 ```bash
 $ thesis papers "transformer attention" --source arxiv --limit 3

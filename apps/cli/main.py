@@ -171,7 +171,7 @@ def add_output_args(p):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thesis",
-        description="Thesis Assistant CLI — research, critique, verify, and discover papers.",
+        description="Thesis Assistant CLI  -  research, critique, verify, and discover papers.",
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
