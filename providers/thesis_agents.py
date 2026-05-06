@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from pydantic import BaseModel
 
@@ -39,7 +39,7 @@ def _schema_for(model_cls: Type[BaseModel]) -> Dict[str, Any]:
     return _MODEL_SCHEMAS[model_cls]
 
 
-def _parse_json_response(text: str) -> Dict[str, Any]:
+def _parse_json_response(text: str) -> Any:
     """Handle LLM JSON variance: code blocks, trailing commas, single quotes, missing fields."""
     if not text or not text.strip():
         return {}
@@ -176,14 +176,14 @@ def _build_placeholder_critique_result() -> CritiqueResult:
 
 
 class ThesisHeadProvider:
-    def __init__(self, unified: UnifiedLLM, compiler: PromptCompiler = None):
+    def __init__(self, unified: UnifiedLLM, compiler: Optional[PromptCompiler] = None):
         self.unified = unified
         self.compiler = compiler or PromptCompiler()
 
     async def execute(
         self,
         task: Task,
-        context: Dict[str, Any] = None,
+        context: Optional[Dict[str, Any]] = None,
         mode: str = "planner",
     ) -> Dict[str, Any]:
         context = context or {}
@@ -265,11 +265,11 @@ class ThesisHeadProvider:
 
 
 class ResearcherAgent:
-    def __init__(self, unified: UnifiedLLM, compiler: PromptCompiler = None):
+    def __init__(self, unified: UnifiedLLM, compiler: Optional[PromptCompiler] = None):
         self.unified = unified
         self.compiler = compiler or PromptCompiler()
 
-    async def execute(self, task: Task, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         entries: List[BlackboardEntry] = context.get("blackboard_entries", [])
 
@@ -305,11 +305,11 @@ class ResearcherAgent:
 
 
 class CheckerAgent:
-    def __init__(self, unified: UnifiedLLM, compiler: PromptCompiler = None):
+    def __init__(self, unified: UnifiedLLM, compiler: Optional[PromptCompiler] = None):
         self.unified = unified
         self.compiler = compiler or PromptCompiler()
 
-    async def execute(self, task: Task, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         entries: List[BlackboardEntry] = context.get("blackboard_entries", [])
 
@@ -344,11 +344,11 @@ class CheckerAgent:
 
 
 class SynthesizerAgent:
-    def __init__(self, unified: UnifiedLLM, compiler: PromptCompiler = None):
+    def __init__(self, unified: UnifiedLLM, compiler: Optional[PromptCompiler] = None):
         self.unified = unified
         self.compiler = compiler or PromptCompiler()
 
-    async def execute(self, task: Task, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         entries: List[BlackboardEntry] = context.get("blackboard_entries", [])
 
@@ -386,11 +386,11 @@ class SynthesizerAgent:
 
 
 class CriticAgent:
-    def __init__(self, unified: UnifiedLLM, compiler: PromptCompiler = None):
+    def __init__(self, unified: UnifiedLLM, compiler: Optional[PromptCompiler] = None):
         self.unified = unified
         self.compiler = compiler or PromptCompiler()
 
-    async def execute(self, task: Task, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         context = context or {}
         entries: List[BlackboardEntry] = context.get("blackboard_entries", [])
 

@@ -22,7 +22,7 @@ _PROVIDER_API_KEY_ENV = {
 class LLMAdapter:
     """Single-provider backend adapter. Called by UnifiedLLM, not by agents directly."""
 
-    def __init__(self, provider: str, default_model: str = None):
+    def __init__(self, provider: str, default_model: Optional[str] = None):
         self.provider = provider
         self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
         self.default_model = default_model or "unknown"
@@ -48,7 +48,7 @@ class LLMAdapter:
         self,
         prompt: str,
         system_prompt: str = "",
-        model: str = None,
+        model: Optional[str] = None,
         response_schema: Optional[Dict[str, Any]] = None,
     ) -> str:
         model_name = model or self.default_model
@@ -119,7 +119,7 @@ class LLMAdapter:
                     return json.dumps(block.input)
             raise ValueError("Anthropic did not return a tool_use block when schema was requested")
 
-        return response.content[0].text
+        return str(response.content[0].text)
 
     async def _generate_openai(
         self,
@@ -132,7 +132,7 @@ class LLMAdapter:
         if self.openai_client is None:
             raise ValueError(f"OpenAI-compatible client not initialized for '{self.provider}'")
 
-        messages: list = []
+        messages: list[dict[str, Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
@@ -161,7 +161,7 @@ class LLMAdapter:
             timeout=120,
         )
 
-        return response.choices[0].message.content
+        return str(response.choices[0].message.content)
 
 
 def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
@@ -183,7 +183,7 @@ def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
     return json.dumps(result)
 
 
-def _get_available_providers() -> list:
+def _get_available_providers() -> list[str]:
     available = []
     for prov in ("anthropic", "openai", "deepseek"):
         key_env = _PROVIDER_API_KEY_ENV.get(prov, "")
@@ -229,11 +229,11 @@ def create_unified_llm() -> UnifiedLLM:
 
 
 class ConfigurableHeadProvider(HeadProvider):
-    def __init__(self, unified: UnifiedLLM = None):
+    def __init__(self, unified: Optional[UnifiedLLM] = None):
         self.unified = unified or create_unified_llm()
         self.compiler = PromptCompiler()
 
-    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
         blackboard_entries = context.get("blackboard_entries", [])
         system_prompt = self.compiler.compile_head_system_prompt(blackboard_entries)
         response = await self.unified.generate(
@@ -255,10 +255,10 @@ class ConfigurableHeadProvider(HeadProvider):
 
 
 class ConfigurableMiddleProvider(MiddleProvider):
-    def __init__(self, unified: UnifiedLLM = None):
+    def __init__(self, unified: Optional[UnifiedLLM] = None):
         self.unified = unified or create_unified_llm()
 
-    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
         response = await self.unified.generate(
             prompt=task.description,
             mode="balanced",
@@ -277,10 +277,10 @@ class ConfigurableMiddleProvider(MiddleProvider):
 
 
 class ConfigurableWorkerProvider(WorkerProvider):
-    def __init__(self, unified: UnifiedLLM = None):
+    def __init__(self, unified: Optional[UnifiedLLM] = None):
         self.unified = unified or create_unified_llm()
 
-    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
         response = await self.unified.generate(
             prompt=task.description,
             mode="cheap",

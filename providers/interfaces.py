@@ -7,17 +7,17 @@ from providers.base import BaseAgentProvider
 
 class HeadProvider(BaseAgentProvider):
     @abstractmethod
-    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
         pass
 
 
 class MiddleProvider(BaseAgentProvider):
     @abstractmethod
-    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
         pass
 
 
 class WorkerProvider(BaseAgentProvider):
     @abstractmethod
-    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore[override]
         pass

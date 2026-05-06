@@ -5,7 +5,7 @@ from core.schemas import CorpusContext, CorpusStats
 
 
 class CorpusAnalyzer:
-    def __init__(self, retriever: CorpusRetrieve = None):
+    def __init__(self, retriever: Optional[CorpusRetrieve] = None):
         self.retriever = retriever or CorpusRetrieve()
 
     def analyze(

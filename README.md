@@ -85,18 +85,20 @@ python -m apps.mcp_server.main
 
 Four tools are registered: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`.
 
-**OpenCode**  -  add to your OpenCode config (e.g. `~/.config/opencode/mcp_servers.json`):
+**OpenCode**  -  add to your OpenCode config (e.g. `~/.config/opencode/opencode.json` or .jsonc):
 
 ```json
-{
-  "mcpServers": {
+  "mcp": {
     "thesis-assistant": {
-      "command": "python",
-      "args": ["-m", "apps.mcp_server.main"],
-      "cwd": "/absolute/path/to/openworkers"
+      "type": "local",
+      "command": [
+        "bash",
+        "-lc",
+        "cd /path/to/openworkers && docker compose run --rm -i mcp"
+      ]
     }
   }
-}
+
 ```
 
 **Claude Code**  -  register the server:

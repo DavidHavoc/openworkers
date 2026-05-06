@@ -71,7 +71,7 @@ class Blackboard:
                 entries.append(BlackboardEntry.model_validate_json(data))
         return sorted(entries, key=lambda x: x.timestamp)
 
-    def clear(self):
+    def clear(self) -> None:
         keys = self.redis.keys(f"{self.prefix}*")
         if keys:
             self.redis.delete(*keys)

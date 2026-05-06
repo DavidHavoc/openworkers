@@ -80,19 +80,21 @@ class TaskOrchestrator:
         try:
             if route_decision.workers_allowed:
                 worker_out = await self.worker_provider.execute(
-                    task, self.blackboard.get_all_entries()
+                    task, {"blackboard_entries": self.blackboard.get_all_entries()}
                 )
                 self.blackboard.add_entry("agent_output", worker_out)
                 outputs.append(worker_out)
 
                 if route_decision.middle_allowed:
                     middle_out = await self.middle_provider.execute(
-                        task, self.blackboard.get_all_entries()
+                        task, {"blackboard_entries": self.blackboard.get_all_entries()}
                     )
                     self.blackboard.add_entry("agent_output", middle_out)
                     outputs.append(middle_out)
 
-            head_out = await self.head_provider.execute(task, self.blackboard.get_all_entries())
+            head_out = await self.head_provider.execute(
+                task, {"blackboard_entries": self.blackboard.get_all_entries()}
+            )
             self.blackboard.add_entry("agent_output", head_out)
             outputs.append(head_out)
             success = True

@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import Any, List
 
 from qdrant_client import QdrantClient
 
@@ -60,8 +60,8 @@ class CorpusRetrieve:
         all_meta = self._scroll_all_metadata()
 
         stats = CorpusStats(discipline=discipline)
-        thesis_ids: set = set()
-        section_stats: dict = {}
+        thesis_ids: set[str] = set()
+        section_stats: dict[str, Any] = {}
 
         for meta in all_meta:
             if meta.get("discipline", "").lower() != discipline.lower():
@@ -106,8 +106,8 @@ class CorpusRetrieve:
 
         return stats
 
-    def _scroll_all_metadata(self) -> List[dict]:
-        all_meta: List[dict] = []
+    def _scroll_all_metadata(self) -> List[dict[str, Any]]:
+        all_meta: List[dict[str, Any]] = []
         offset = None
         while True:
             points, next_offset = self.client.scroll(

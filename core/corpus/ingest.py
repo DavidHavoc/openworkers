@@ -1,7 +1,7 @@
 import os
 import re
 import uuid
-from typing import List
+from typing import Any, List
 
 from qdrant_client import QdrantClient
 
@@ -77,8 +77,8 @@ def _count_citations(text: str) -> int:
     return len(CITATION_RE.findall(text))
 
 
-def _split_sections(text: str) -> List[dict]:
-    sections: List[dict] = []
+def _split_sections(text: str) -> List[dict[str, Any]]:
+    sections: List[dict[str, Any]] = []
     lines = text.split("\n")
     current_heading = "(Preamble)"
     current_lines: List[str] = []
@@ -199,7 +199,7 @@ class CorpusIngest:
         corpus_sections: List[CorpusSection] = []
         ids: List[str] = []
         documents: List[str] = []
-        payloads: List[dict] = []
+        payloads: List[dict[str, Any]] = []
 
         for sd in section_dicts:
             section_id = str(uuid.uuid4())

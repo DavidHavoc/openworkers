@@ -90,24 +90,24 @@ class ProviderHealthCache:
             return True
         return healthy
 
-    def mark_unhealthy(self, provider: str):
+    def mark_unhealthy(self, provider: str) -> None:
         self._cache[provider] = (False, time.monotonic())
 
-    def mark_healthy(self, provider: str):
+    def mark_healthy(self, provider: str) -> None:
         if provider in self._cache:
             del self._cache[provider]
 
 
 class UnifiedLLM:
-    def __init__(self, blackboard=None):
+    def __init__(self, blackboard: Any = None) -> None:
         self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
         self.blackboard = blackboard
         self.health_cache = ProviderHealthCache()
         self._session_spend: Dict[str, float] = {}
-        self._generate_fn: Optional[Callable] = None
+        self._generate_fn: Optional[Callable[..., Any]] = None
         self._available_providers: List[str] = []
 
-    def validate_startup(self):
+    def validate_startup(self) -> None:
         if self.dry_run:
             return
         for mode in ("quality", "balanced", "cheap"):
@@ -119,10 +119,10 @@ class UnifiedLLM:
                     f"See Phase 4 docs for provider routing configuration."
                 )
 
-    def set_generate_fn(self, fn: Callable):
+    def set_generate_fn(self, fn: Callable[..., Any]) -> None:
         self._generate_fn = fn
 
-    def set_available_providers(self, providers: List[str]):
+    def set_available_providers(self, providers: List[str]) -> None:
         self._available_providers = providers
 
     async def generate(
@@ -266,7 +266,10 @@ class UnifiedLLM:
         response_schema: Optional[Dict[str, Any]] = None,
     ) -> str:
         if self._generate_fn:
-            return await self._generate_fn(provider, model, prompt, system_prompt, response_schema)
+            result: str = await self._generate_fn(
+                provider, model, prompt, system_prompt, response_schema
+            )
+            return result
         return f"[NO_PROVIDER] {provider}/{model} unavailable"
 
     def _default_model_for(self, provider: str) -> str:
@@ -280,5 +283,5 @@ class UnifiedLLM:
     def _get_spend(self, provider: str) -> float:
         return self._session_spend.get(provider, 0.0)
 
-    def _add_spend(self, provider: str, amount: float):
+    def _add_spend(self, provider: str, amount: float) -> None:
         self._session_spend[provider] = self._get_spend(provider) + amount

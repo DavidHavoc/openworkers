@@ -48,9 +48,9 @@ class ThesisOrchestrator:
         unified: UnifiedLLM,
         memory: EpisodicMemory,
         router: Router,
-        blackboard: Blackboard = None,
-        tool_registry=None,
-    ):
+        blackboard: Optional[Blackboard] = None,
+        tool_registry: Any = None,
+    ) -> None:
         self.unified = unified
         self.memory = memory
         self.router = router
@@ -433,7 +433,7 @@ class ThesisOrchestrator:
         return all_papers
 
     def _deduplicate_papers(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        seen: set = set()
+        seen: set[str] = set()
         deduped: List[Dict[str, Any]] = []
         for p in papers:
             pid = p.get("paper_id") or p.get("arxiv_id") or p.get("doi", "")
@@ -455,7 +455,7 @@ class ThesisOrchestrator:
             return []
 
         try:
-            params = {"query": query}
+            params: Dict[str, Any] = {"query": query}
             if tool_name == "arxiv_search":
                 params["max_results"] = limit
             else:
@@ -463,7 +463,7 @@ class ThesisOrchestrator:
             result = await tool.execute(params, "public")
             if "error" in result:
                 return []
-            papers = result.get("papers", [])
+            papers: List[Dict[str, Any]] = list(result.get("papers", []))
             for p in papers:
                 p["source"] = source
             return papers
@@ -486,7 +486,9 @@ class ThesisOrchestrator:
             return {"exists": False, "error": "Tool not found"}
 
         try:
-            return await tool.execute({"doi": doi_or_title.strip()}, "public")
+            result = await tool.execute({"doi": doi_or_title.strip()}, "public")
+            output: Dict[str, Any] = dict(result)
+            return output
         except Exception as e:
             return {"exists": False, "error": str(e)}
 
@@ -514,6 +516,9 @@ class ThesisOrchestrator:
                 {"blackboard_entries": dummy_entries},
                 mode="supervisor",
             )
-            return result["output"]
+            output: Any = result.get("output")
+            if isinstance(output, CritiqueResult):
+                return output
+            return _build_placeholder_critique_result()
         except Exception:
             return _build_placeholder_critique_result()

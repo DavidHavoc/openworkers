@@ -68,7 +68,7 @@ def _build_fallback_order(preferred: str) -> List[str]:
 
 
 class Router:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     def route_task(

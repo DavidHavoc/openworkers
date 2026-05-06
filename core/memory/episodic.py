@@ -32,7 +32,7 @@ class EpisodicMemory:
                 vectors_config=self.client.get_fastembed_vector_params(),
             )
 
-    def store_episode(self, episode: MemoryEpisode):
+    def store_episode(self, episode: MemoryEpisode) -> None:
         """Stores a compact routing episode into Qdrant."""
         self.client.add(
             collection_name=self.collection_name,
@@ -73,11 +73,11 @@ class EpisodicMemory:
 
         if successful:
             # Dynamically assess the most common successful route
-            route_counts = {}
+            route_counts: dict[str, int] = {}
             for e in successful:
                 route_str = str(e.route.model_dump())
                 route_counts[route_str] = route_counts.get(route_str, 0) + 1
-            most_common = max(route_counts, key=route_counts.get)
+            most_common = max(route_counts, key=lambda k: route_counts[k])
 
             brief.strongest_successful_pattern = (
                 f"Route {most_common} was the most consistently successful pattern."

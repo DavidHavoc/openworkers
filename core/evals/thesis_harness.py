@@ -26,22 +26,22 @@ class ThesisEvalResult:
         self.detail = ""
         self.errors: List[str] = []
 
-    def pass_(self, detail: str = ""):
+    def pass_(self, detail: str = "") -> None:
         self.passed = True
         self.detail = detail
 
-    def fail(self, detail: str):
+    def fail(self, detail: str) -> None:
         self.passed = False
         self.detail = detail
 
-    def add_error(self, msg: str):
+    def add_error(self, msg: str) -> None:
         self.errors.append(msg)
 
 
 class ThesisEvalHarness:
-    def __init__(self):
+    def __init__(self) -> None:
         self.results: List[ThesisEvalResult] = []
-        self.tool_registry = ToolRegistry()
+        self.tool_registry: ToolRegistry = ToolRegistry()  # type: ignore[no-untyped-call]
 
     async def run(self) -> bool:
         print("=" * 60)
@@ -59,7 +59,7 @@ class ThesisEvalHarness:
         print()
         return self._print_scorecard()
 
-    async def _test_search_recall(self):
+    async def _test_search_recall(self) -> None:
         r = ThesisEvalResult("Search Recall (crossref_verification)")
         try:
             tool = self.tool_registry.get_tool("crossref_verification")
@@ -88,7 +88,7 @@ class ThesisEvalHarness:
         self.results.append(r)
         self._print_result(r)
 
-    async def _test_structure_check(self):
+    async def _test_structure_check(self) -> None:
         r = ThesisEvalResult("Structure Check (ResearchSession fields)")
         try:
             orch = self._create_orchestrator()
@@ -159,7 +159,7 @@ class ThesisEvalHarness:
         self.results.append(r)
         self._print_result(r)
 
-    async def _test_fake_doi_detection(self):
+    async def _test_fake_doi_detection(self) -> None:
         r = ThesisEvalResult("Fake DOI Detection")
         try:
             orch = self._create_orchestrator()
@@ -181,7 +181,7 @@ class ThesisEvalHarness:
         self.results.append(r)
         self._print_result(r)
 
-    async def _test_bad_idea_detection(self):
+    async def _test_bad_idea_detection(self) -> None:
         r = ThesisEvalResult("Bad Idea Detection (too-broad critique)")
         try:
             orch = self._create_orchestrator()
@@ -221,7 +221,7 @@ class ThesisEvalHarness:
         self.results.append(r)
         self._print_result(r)
 
-    async def _test_cost_measurement(self):
+    async def _test_cost_measurement(self) -> None:
         r = ThesisEvalResult("Cost Measurement (3 sessions)")
         try:
             orch = self._create_orchestrator()
@@ -253,7 +253,7 @@ class ThesisEvalHarness:
         self.results.append(r)
         self._print_result(r)
 
-    async def _test_synthesis_quality(self):
+    async def _test_synthesis_quality(self) -> None:
         r = ThesisEvalResult("Synthesis Quality (structure check)")
         try:
             orch = self._create_orchestrator()
@@ -294,7 +294,7 @@ class ThesisEvalHarness:
         self.results.append(r)
         self._print_result(r)
 
-    async def _test_full_pipeline_integrity(self):
+    async def _test_full_pipeline_integrity(self) -> None:
         r = ThesisEvalResult("Full Pipeline Integrity (all 8 stages)")
         try:
             orch = self._create_orchestrator()
@@ -343,7 +343,7 @@ class ThesisEvalHarness:
             tool_registry=self.tool_registry,
         )
 
-    def _print_result(self, r: ThesisEvalResult):
+    def _print_result(self, r: ThesisEvalResult) -> None:
         status = "PASS" if r.passed else "FAIL"
         print(f"  [{status}] {r.name}")
         if r.detail:

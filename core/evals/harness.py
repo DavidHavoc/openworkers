@@ -15,7 +15,7 @@ class EvalTask:
 
 
 class EvaluationHarness:
-    def __init__(self):
+    def __init__(self) -> None:
         self.memory = EpisodicMemory()
         self.router = Router()
 

@@ -17,7 +17,7 @@ TEMPLATE_MAP = {
 
 
 class PromptCompiler:
-    def __init__(self):
+    def __init__(self) -> None:
         self._template_cache: Dict[str, str] = {}
 
     def _load_template(self, name: str) -> str:
