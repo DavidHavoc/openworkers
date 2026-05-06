@@ -1,83 +1,75 @@
-# Contributing
+# Contributing to OpenWorkers
 
-## Setup
+## Getting started
 
-See the [README](README.md) for install and `.env` configuration.
-
-## Architecture
-
-```
-core/
-├── schemas.py          Pydantic data models
-├── blackboard/         Shared state (Redis)
-├── memory/             Episodic memory (Qdrant)
-├── router/             Agent + provider routing
-├── orchestrator/       Task + thesis flow, prompt compiler
-├── corpus/             Thesis corpus ingest/retrieve/benchmark
-├── evals/              Thesis evaluation harness
-├── observability/      Structured JSON logging
-providers/
-├── unified.py          Unified LLM routing layer
-├── adapters.py         Provider backend adapters
-├── thesis_agents.py    HEAD + 4 specialist agents
-tools/mcp/
-├── engine.py           Tool registry + base class
-├── academic.py         arXiv, Semantic Scholar, CrossRef tools
-prompts/                System prompt templates (Markdown)
-apps/
-├── cli/                CLI tool
-├── mcp_server/         MCP JSON-RPC server
-├── shared/             Formatting (text/JSON)
-scripts/
-├── seed_corpus.py      Bootstrap corpus from arXiv
+```bash
+git clone https://github.com/DavidHavoc/openworkers.git
+cd openworkers
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-## Adding a new provider
+Set up pre-commit hooks:
 
-1. Add provider key to `ALL_PROVIDERS` in `providers/unified.py`
-2. Add API key env var to `_PROVIDER_API_KEY_ENV` in `providers/adapters.py`
-3. Add a branch to `LLMAdapter.generate()` for the new provider
-4. Add a cost estimate to `COST_PER_1K_TOKENS`
-5. Update `.env.example` with the new section
+```bash
+pre-commit install
+```
 
-## Adding a new specialist agent
+Copy `.env.example` to `.env` and configure API keys for providers you want to test live.
+`DRY_RUN=true` runs the full pipeline without making LLM calls.
 
-1. Create prompt template in `prompts/specialist_<name>.md`
-2. Add template to `TEMPLATE_MAP` in `core/orchestrator/compiler.py`
-3. Add compile method to `PromptCompiler`
-4. Create agent class in `providers/thesis_agents.py`
-5. Register agent in `ThesisOrchestrator.__init__` in `core/orchestrator/thesis_flow.py`
-6. Add pipeline stage in `ThesisOrchestrator.execute()`
+## Running locally
 
-## Code conventions
+```bash
+make test       # Run all tests
+make lint       # Run black + flake8
+ruff check .    # Fast linting with ruff
 
-- **Pydantic models** for all data structures  -  never pass raw dicts between agents
-- **Async everywhere**  -  all agent execution and API calls use `async/await`
-- **Stdlib for MCP tools**  -  `urllib` only, no extra HTTP dependencies
-- **Errors surface in response**  -  pipeline stages catch exceptions and add to `errors` list; never crash
-- **DRY_RUN**  -  all agents produce placeholder output when `DRY_RUN=true`. Test new features in DRY_RUN before needing real API keys
-- **Logging**  -  use `obs_logger` for structured events; `logger.info/warning` for routing messages
+# Run the full thesis pipeline in dry-run mode
+python -m apps.cli.main research "Test research question"
+
+# Build and run with Docker
+docker compose build
+docker compose up -d
+```
+
+## Submitting changes
+
+1. Create a branch from `develop`: `git checkout -b feat/my-feature develop`
+2. Make your changes
+3. Run tests: `pytest tests/ -v`
+4. Run linters: `ruff check . && black --check . && flake8 .`
+5. Run type checks: `mypy core/ providers/ --strict --ignore-missing-imports`
+6. Commit with a descriptive message following conventional commits (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`)
+7. Push and open a PR against `develop`
+
+## Code standards
+
+- **Python 3.9+** compatible
+- **Pydantic v2** for all data models — no raw dicts or JSON strings in the business logic
+- **Async-first** — all I/O uses `async/await` via httpx
+- **Structured output** — all LLM responses are validated through Pydantic schemas
+- **Ruff** handles import sorting, basic linting, and formatting
+- **Black** is the formatter (line length 100)
+- **Mypy strict** is required for `core/` and `providers/` modules
+
+## Project structure
+
+```
+apps/          -- entry points (CLI, API, MCP server, worker)
+core/          -- orchestrator, router, blackboard, memory, schemas, evals
+providers/     -- LLM adapters, agent implementations, unified routing
+tools/         -- MCP tool implementations (academic search, web search)
+tests/         -- pytest suite
+prompts/       -- LLM prompt templates
+scripts/       -- seed corpus, utilities
+```
 
 ## Testing
 
-```bash
-# Full test suite
-pytest tests/ -v
+- Unit tests in `tests/test_core.py` — schemas, blackboard, routing, memory
+- Integration tests in `tests/test_integrations.py` — MCP tools, adapters, evals
+- Smoke tests in `tests/test_smoke.py` — API endpoints
 
-# Smoke test
-pytest tests/test_smoke.py -v
-
-# Eval harness (DRY_RUN)
-python -m core.evals.thesis_harness
-
-# Specific command
-python -m apps.cli.main research "test" --format json
-```
-
-## PR guidelines
-
-- Run `pytest tests/ -v` and verify all tests pass
-- Run `python -m core.evals.thesis_harness` and verify 7/7
-- New modules need an `__init__.py`
-- Follow existing class naming and docstring patterns
-- No new dependencies without justification in the PR description
+All tests use `fakeredis` for Redis and in-memory Qdrant. No external services required for test runs.

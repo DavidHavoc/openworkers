@@ -1,0 +1,55 @@
+name: Bug report
+description: File a bug report
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands or code that triggers the bug.
+      render: bash
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit hash or branch.
+      placeholder: "main @ a1b2c3d"
+
+  - type: dropdown
+    id: python
+    attributes:
+      label: Python version
+      options:
+        - "3.9"
+        - "3.10"
+        - "3.11"
+        - "3.12"
+
+  - type: checkboxes
+    id: dryrun
+    attributes:
+      label: Dry-run mode
+      options:
+        - label: Bug occurs in DRY_RUN=true mode
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      render: text
