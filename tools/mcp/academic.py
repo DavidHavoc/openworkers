@@ -1,3 +1,4 @@
+import asyncio
 import urllib.parse
 import xml.etree.ElementTree as ET
 import json
@@ -12,6 +13,53 @@ ARXIV_NAMESPACES = {
     "arxiv": "http://arxiv.org/schemas/atom",
     "opensearch": "http://a9.com/-/spec/opensearch/1.1/",
 }
+
+_RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 1.0
+
+_client: httpx.AsyncClient = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0),
+            limits=httpx.Limits(max_keepalive_connections=6, max_connections=20),
+            headers={"User-Agent": "OpenWorkers/1.0"},
+        )
+    return _client
+
+
+async def _request_with_retry(
+    method: str,
+    url: str,
+    *,
+    headers: Dict[str, str] = None,
+    max_retries: int = _MAX_RETRIES,
+) -> httpx.Response:
+    client = _get_client()
+    last_exc: Exception = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = await client.request(method, url, headers=headers)
+            if resp.status_code in _RETRYABLE_STATUSES and attempt < max_retries:
+                raise httpx.HTTPStatusError(
+                    f"Retryable status {resp.status_code}",
+                    request=resp.request,
+                    response=resp,
+                )
+            resp.raise_for_status()
+            return resp
+        except (httpx.RequestError, httpx.HTTPStatusError) as e:
+            last_exc = e
+            if attempt < max_retries:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                await asyncio.sleep(delay)
+            else:
+                raise last_exc
+    raise last_exc
 
 
 class ArxivSearchTool(MCPTool):
@@ -69,10 +117,8 @@ class ArxivSearchTool(MCPTool):
         )
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(url, headers={"User-Agent": "OpenWorkers/1.0"})
-                resp.raise_for_status()
-                raw = resp.text
+            resp = await _request_with_retry("GET", url)
+            raw = resp.text
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response.text else ""
             return {"papers": [], "total_results": 0, "error": f"arXiv API returned {e.response.status_code}: {body}"}
@@ -200,10 +246,8 @@ class SemanticScholarSearchTool(MCPTool):
         )
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(url, headers={"User-Agent": "OpenWorkers/1.0"})
-                resp.raise_for_status()
-                data = resp.json()
+            resp = await _request_with_retry("GET", url)
+            data = resp.json()
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response.text else ""
             return {"papers": [], "total": 0, "error": f"Semantic Scholar API returned {e.response.status_code}: {body}"}
@@ -211,8 +255,6 @@ class SemanticScholarSearchTool(MCPTool):
             return {"papers": [], "total": 0, "error": f"Semantic Scholar API request failed: {e}"}
         except json.JSONDecodeError:
             return {"papers": [], "total": 0, "error": "Semantic Scholar returned invalid JSON"}
-        except Exception as e:
-            return {"papers": [], "total": 0, "error": str(e)}
 
         papers: List[Dict[str, Any]] = []
         for item in data.get("data", []):
@@ -279,21 +321,19 @@ class CrossRefVerificationTool(MCPTool):
         url = f"https://api.crossref.org/works/{urllib.parse.quote(doi, safe='')}"
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(url, headers={"User-Agent": "OpenWorkers/1.0 (mailto:dev@openworkers.ai)"})
-                if resp.status_code == 404:
-                    return {"exists": False, "doi": doi}
-                resp.raise_for_status()
-                data = resp.json()
+            resp = await _request_with_retry("GET", url)
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return {"exists": False, "doi": doi}
             body = e.response.text[:300] if e.response.text else ""
             return {"exists": False, "doi": doi, "error": f"CrossRef API returned {e.response.status_code}: {body}"}
         except httpx.RequestError as e:
             return {"exists": False, "doi": doi, "error": f"CrossRef API request failed: {e}"}
+
+        try:
+            data = resp.json()
         except json.JSONDecodeError:
             return {"exists": False, "doi": doi, "error": "CrossRef returned invalid JSON"}
-        except Exception as e:
-            return {"exists": False, "doi": doi, "error": str(e)}
 
         message = data.get("message", {})
         if not message:

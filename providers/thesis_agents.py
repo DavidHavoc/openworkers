@@ -22,6 +22,24 @@ from core.orchestrator.compiler import PromptCompiler
 logger = logging.getLogger(__name__)
 
 
+_MODEL_SCHEMAS: Dict[Type[BaseModel], Dict[str, Any]] = {}
+_SCHEMA_NAMES: Dict[Type[BaseModel], str] = {
+    ResearchPlan: "ResearchPlan",
+    LitMap: "LitMap",
+    CitationAudit: "CitationAudit",
+    SynthesisReport: "SynthesisReport",
+    CritiqueResult: "CritiqueResult",
+}
+
+
+def _schema_for(model_cls: Type[BaseModel]) -> Dict[str, Any]:
+    if model_cls not in _MODEL_SCHEMAS:
+        raw = model_cls.model_json_schema()
+        raw.pop("title", None)
+        _MODEL_SCHEMAS[model_cls] = raw
+    return _MODEL_SCHEMAS[model_cls]
+
+
 def _parse_json_response(text: str) -> Dict[str, Any]:
     """Handle LLM JSON variance: code blocks, trailing commas, single quotes, missing fields."""
     if not text or not text.strip():
@@ -179,7 +197,8 @@ class ThesisHeadProvider:
         prompt = f"Research Question: {task.description}"
         system_prompt = self.compiler.compile_head_planner(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="quality"
+            prompt=prompt, system_prompt=system_prompt, mode="quality",
+            response_schema=_schema_for(ResearchPlan),
         )
 
         if response.dry_run:
@@ -205,7 +224,8 @@ class ThesisHeadProvider:
         prompt = f"Review all agent findings and produce a structured critique for: {task.description}"
         system_prompt = self.compiler.compile_head_supervisor(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="quality"
+            prompt=prompt, system_prompt=system_prompt, mode="quality",
+            response_schema=_schema_for(CritiqueResult),
         )
 
         if response.dry_run:
@@ -240,7 +260,8 @@ class ResearcherAgent:
         prompt = f"Search for papers relevant to: {question}\n\nTask: {task.description}"
         system_prompt = self.compiler.compile_specialist_researcher(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="cheap"
+            prompt=prompt, system_prompt=system_prompt, mode="cheap",
+            response_schema=_schema_for(LitMap),
         )
 
         if response.dry_run:
@@ -274,7 +295,8 @@ class CheckerAgent:
         prompt = f"Verify all citations and claims for: {task.description}"
         system_prompt = self.compiler.compile_specialist_checker(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="balanced"
+            prompt=prompt, system_prompt=system_prompt, mode="balanced",
+            response_schema=_schema_for(CitationAudit),
         )
 
         if response.dry_run:
@@ -308,7 +330,8 @@ class SynthesizerAgent:
         prompt = f"Extract methods, datasets, and metrics from the literature for: {task.description}"
         system_prompt = self.compiler.compile_specialist_synthesizer(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="balanced"
+            prompt=prompt, system_prompt=system_prompt, mode="balanced",
+            response_schema=_schema_for(SynthesisReport),
         )
 
         if response.dry_run:
@@ -343,7 +366,8 @@ class CriticAgent:
         prompt = f"Critique the research and find counterarguments for: {task.description}"
         system_prompt = self.compiler.compile_specialist_critic(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="quality"
+            prompt=prompt, system_prompt=system_prompt, mode="quality",
+            response_schema=_schema_for(CritiqueResult),
         )
 
         if response.dry_run:

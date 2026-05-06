@@ -260,29 +260,12 @@ python core/evals/thesis_harness.py
 pytest tests/ -v
 ```
 
-## Implementation Roadmap
-
-| Phase | What |
-|---|---|
-| 1 | Data models (ResearchContext, LitMap, CritiqueResult, etc.) |
-| 1-fix | **Done** — Bug fixes: router provider fallback defaults, blackboard recursion, httpx migration, structured JSON parsing |
-| 2 | Academic MCP tools (arXiv, Semantic Scholar, CrossRef) |
-| 3 | System prompt templates (HEAD planner/supervisor + 4 specialists) |
-| 4 | Unified LLM Interface (routing layer, policy, fallback, budget) |
-| 5 | 4 specialist agent providers (researcher, checker, synthesizer, critic) |
-| 6 | Orchestrator (HEAD plan -> specialists -> HEAD final) |
-| 7 | Router / policy layer integration |
-| 8 | Evaluation harness |
-| 9 | CLI tool |
-| 10 | MCP server (OpenCode + Claude Code) |
-| 11 | Thesis corpus learning |
-
 See [docs/architecture.md](docs/architecture.md) for the tier breakdown.
 See [docs/examples.md](docs/examples.md) for output format samples.
 
 ## Contributing
 
-We welcome contributions from the community — bug fixes, documentation improvements, new features, or provider integrations. Before submitting a PR, run the test suite and eval harness to make sure nothing breaks. See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture overview, code conventions, and the PR checklist.
+We welcome contributions from the community: bug fixes, documentation improvements, new features, or provider integrations. Before submitting a PR, run the test suite and eval harness to make sure nothing breaks. See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture overview, code conventions, and the PR checklist.
 
 ## License
 

@@ -8,6 +8,7 @@ Run: python -m scripts.seed_corpus
 import os
 import json
 import urllib.parse
+import time
 import tempfile
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any
@@ -28,6 +29,20 @@ SEED_QUERIES: Dict[str, str] = {
     "economics": "machine learning economic forecasting",
 }
 
+_HTTP_TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+_CLIENT: httpx.Client = None
+
+
+def _get_client() -> httpx.Client:
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = httpx.Client(
+            timeout=_HTTP_TIMEOUT,
+            limits=httpx.Limits(max_keepalive_connections=4, max_connections=10),
+            headers={"User-Agent": "SeedCorpus/1.0"},
+        )
+    return _CLIENT
+
 
 def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
     url = (
@@ -36,10 +51,10 @@ def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
         f"&start=0&max_results={max_results}&sortBy=relevance&sortOrder=descending"
     )
     try:
-        with httpx.Client(timeout=30) as client:
-            resp = client.get(url, headers={"User-Agent": "SeedCorpus/1.0"})
-            resp.raise_for_status()
-            raw = resp.text
+        client = _get_client()
+        resp = client.get(url)
+        resp.raise_for_status()
+        raw = resp.text
         root = ET.fromstring(raw)
         papers = []
         for entry in root.findall("atom:entry", ARXIV_NAMESPACES):
@@ -80,10 +95,10 @@ def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
 def _download_pdf_text(arxiv_id: str) -> str:
     url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
     try:
-        with httpx.Client(timeout=60) as client:
-            resp = client.get(url, headers={"User-Agent": "SeedCorpus/1.0"})
-            resp.raise_for_status()
-            pdf_bytes = resp.content
+        client = _get_client()
+        resp = client.get(url)
+        resp.raise_for_status()
+        pdf_bytes = resp.content
         import fitz
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         text = ""

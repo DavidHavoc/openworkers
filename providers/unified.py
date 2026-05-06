@@ -1,8 +1,9 @@
 import os
+import json
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,25 @@ DEFAULT_MODELS: Dict[str, str] = {
     "openai": "gpt-4o-mini",
     "deepseek": "deepseek-chat",
 }
+
+
+def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
+    props = schema.get("properties", {})
+    required = schema.get("required", [])
+    result: Dict[str, Any] = {}
+    for key, prop in props.items():
+        prop_type = prop.get("type", "string")
+        if prop_type == "string":
+            result[key] = "[DRY_RUN]" if key in required else ""
+        elif prop_type in ("integer", "number"):
+            result[key] = 0
+        elif prop_type == "boolean":
+            result[key] = False
+        elif prop_type == "array":
+            result[key] = []
+        elif prop_type == "object":
+            result[key] = {}
+    return json.dumps(result)
 
 
 def _read_mode_config(mode: str, dry_run: bool = False) -> tuple[str, str]:
@@ -111,14 +131,18 @@ class UnifiedLLM:
         system_prompt: str = "",
         mode: str = "auto",
         budget: Optional[float] = None,
+        response_schema: Optional[Dict[str, Any]] = None,
     ) -> LLMResponse:
         preferred_provider, preferred_model = _read_mode_config(mode, dry_run=self.dry_run)
         t0 = time.monotonic()
 
         if self.dry_run:
             elapsed = (time.monotonic() - t0) * 1000
+            content = f"[DRY_RUN mode={mode} provider={preferred_provider} model={preferred_model}] Would call {preferred_provider}/{preferred_model}. Prompt: {prompt[:80]}..."
+            if response_schema:
+                content = _generate_placeholder_json(response_schema)
             response = LLMResponse(
-                content=f"[DRY_RUN mode={mode} provider={preferred_provider} model={preferred_model}] Would call {preferred_provider}/{preferred_model}. Prompt: {prompt[:80]}...",
+                content=content,
                 provider_used=preferred_provider,
                 model=preferred_model,
                 mode=mode,
@@ -131,6 +155,7 @@ class UnifiedLLM:
                     "available_providers": self._available_providers,
                     "skipped_due_to_health": [],
                     "reason": f"mode={mode} preferred={preferred_provider}/{preferred_model}",
+                    "structured_output": response_schema is not None,
                 },
             )
             logger.info(
@@ -158,7 +183,7 @@ class UnifiedLLM:
             model = preferred_model if provider == preferred_provider else self._default_model_for(provider)
 
             try:
-                result = await self._call_provider(provider, model, prompt, system_prompt)
+                result = await self._call_provider(provider, model, prompt, system_prompt, response_schema)
                 elapsed = (time.monotonic() - t0) * 1000
                 cost = self._estimate_cost(result, provider)
 
@@ -181,6 +206,7 @@ class UnifiedLLM:
                         "skipped_due_to_health": skipped,
                         "reason": reason,
                         "last_error": str(last_error) if last_error else None,
+                        "structured_output": response_schema is not None,
                     },
                 )
                 self.health_cache.mark_healthy(provider)
@@ -223,9 +249,9 @@ class UnifiedLLM:
                 order.append(p)
         return order
 
-    async def _call_provider(self, provider: str, model: str, prompt: str, system_prompt: str) -> str:
+    async def _call_provider(self, provider: str, model: str, prompt: str, system_prompt: str, response_schema: Optional[Dict[str, Any]] = None) -> str:
         if self._generate_fn:
-            return await self._generate_fn(provider, model, prompt, system_prompt)
+            return await self._generate_fn(provider, model, prompt, system_prompt, response_schema)
         return f"[NO_PROVIDER] {provider}/{model} unavailable"
 
     def _default_model_for(self, provider: str) -> str:
