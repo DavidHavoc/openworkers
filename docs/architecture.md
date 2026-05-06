@@ -2,135 +2,129 @@
 
 ## Thesis Pipeline Flow
 
-```plantuml
-@startuml
-skinparam componentStyle rectangle
-skinparam backgroundColor #FEFEFE
+```mermaid
+graph TB
+    Student((Student))
 
-title Thesis Assistant Architecture
+    subgraph Entry["Entry Points"]
+        CLI[CLI]
+        MCP[MCP Server]
+    end
 
-actor Student
+    subgraph Orchestrator["ThesisOrchestrator"]
+        H1["HEAD Planner\nmode=quality"]
+        R["Researcher\nmode=cheap"]
+        CH["Checker\nmode=balanced"]
+        S["Synthesizer\nmode=balanced"]
+        CR["Critic\nmode=quality"]
+        H2["HEAD Supervisor\nmode=quality"]
+    end
 
-package "Entry Points" {
-    [CLI] as CLI
-    [MCP Server] as MCP
-    [API Server] as API
-}
+    subgraph State["Shared State"]
+        BB[("Blackboard\n(Redis)")]
+        EM[("Episodic Memory\n(Qdrant)")]
+        TC[("Thesis Corpus\n(Qdrant)")]
+    end
 
-package "ThesisOrchestrator" {
-    component "HEAD Planner" as H1
-    component "HEAD Supervisor" as H2
-    component "Researcher" as R
-    component "Checker" as CH
-    component "Synthesizer" as S
-    component "Critic" as CR
-}
+    subgraph UnifiedLLM["UnifiedLLM Routing"]
+        RL["Routing Layer"]
+        HC["Health Cache"]
+        BT["Budget Tracker"]
+    end
 
-package "Shared State" {
-    database "Blackboard\n(Redis)" as BB
-    database "Episodic Memory\n(Qdrant)" as EM
-    database "Thesis Corpus\n(Qdrant)" as TC
-}
+    subgraph Providers["LLM Providers"]
+        AN[Anthropic\nSonnet/Haiku]
+        OA[OpenAI\nGPT-4o]
+        DS[DeepSeek\nChat]
+    end
 
-package "UnifiedLLM" {
-    component "Routing Layer" as RL
-    component "Health Cache" as HC
-    component "Budget Tracker" as BT
-}
+    subgraph Tools["MCP Tools"]
+        AR[arXiv Search]
+        SS[Semantic Scholar]
+        XR[CrossRef Verify]
+    end
 
-package "Providers" {
-    [Anthropic\nSonnet/Haiku] as AN
-    [OpenAI\nGPT-4o] as OA
-    [DeepSeek\nChat] as DS
-}
+    OUT[("ResearchSession\noutput")]
 
-package "MCP Tools" {
-    [arXiv\nSearch] as AR
-    [Semantic\nScholar] as SS
-    [CrossRef\nVerify] as XR
-}
+    Student --> CLI
+    Student --> MCP
 
-package "Output" {
-    [ResearchSession] as OUT
-}
+    CLI --> H1
+    MCP --> H1
 
-Student --> CLI
-Student --> MCP
-Student --> API
+    H1 -->|"plan + budget"| BB
+    H1 -->|"retrieve guidance"| EM
 
-CLI --> H1 : research
-MCP --> H1 : thesis_research
-API --> H1 : /tasks/
+    R -->|"query papers"| AR
+    R -->|"query papers"| SS
+    R -->|"LitMap"| BB
 
-H1 --> EM : retrieve guidance
-H1 --> BB : store plan
+    CH -->|"verify DOIs"| XR
+    CH -->|"CitationAudit"| BB
 
-R --> AR : query
-R --> SS : query
-R --> BB : LitMap
+    S -->|"SynthesisReport"| BB
+    S -->|"similar sections"| TC
 
-CH --> XR : verify
-CH --> BB : CitationAudit
+    CR -->|"CritiqueResult"| BB
+    CR -->|"benchmarks"| TC
 
-S --> BB : SynthesisReport
+    H2 -->|"reads all outputs"| BB
+    H2 -->|"final critique"| BB
 
-TC --> S : similar sections
-TC --> CR : benchmarks
+    H1 ---> RL
+    H2 ---> RL
+    R ---> RL
+    CH ---> RL
+    S ---> RL
+    CR ---> RL
 
-CR --> BB : CritiqueResult
+    RL --> HC
+    RL --> BT
+    RL --> AN
+    RL --> OA
+    RL --> DS
 
-H2 --> BB : read all state
-H2 --> BB : final critique
-
-H1 --> RL : mode=quality
-H2 --> RL : mode=quality
-R --> RL : mode=cheap
-CH --> RL : mode=balanced
-S --> RL : mode=balanced
-CR --> RL : mode=quality
-
-RL --> HC : check health
-RL --> BT : check budget
-RL --> AN : fallback chain
-RL --> OA
-RL --> DS
-
-BB --> OUT : assemble
-
-@enduml
+    BB -->|"assemble"| OUT
+    EM -->|"store episode"| OUT
 ```
 
 ## Pipeline Stages
 
 ```
-1. HEAD planner    → ResearchPlan (subquestions, search lanes, budget)
-2. Memory          → MemoryBrief (similar past episodes bias routing)
+1. HEAD planner    → ResearchPlan (subquestions, search lanes, budget allocation)
+2. Episodic memory → MemoryBrief (similar past tasks bias routing decisions)
 3. Researcher      → LitMap (papers classified: supporting / challenging / adjacent)
-4. Checker         → CitationAudit (verified, missing, weak, contested claims)
+4. Checker         → CitationAudit (verified, missing, weak, contested claims + BibTeX)
 5. Synthesizer     → SynthesisReport (methods, datasets, metrics, corpus comparisons)
-6. Critic          → CritiqueResult (strengths, weaknesses, gaps, counterarguments)
-7. HEAD supervisor → final CritiqueResult (merges all findings, assesses viability)
-8. Assemble        → ResearchSession (wraps everything, stores episode in memory)
+6. Corpus retrieval → similar thesis sections + structural benchmarks per discipline
+7. Critic          → CritiqueResult (strengths, weaknesses, gaps, counterarguments)
+8. HEAD supervisor → final CritiqueResult (merges all specialist findings, assesses viability)
+9. Assemble        → ResearchSession (wraps everything, stores episode in memory)
 ```
 
 ## Routing Layer
 
-The `UnifiedLLM` routing layer maps agent mode to provider + model via env vars:
+The `UnifiedLLM` maps agent mode to provider and model via env vars. Each mode can use a different provider, model, or both. Examples:
 
-| Mode | Agents | Env Var | Controls |
-|---|---|---|---|
-| `quality` | HEAD planner, HEAD supervisor, critic | `THESIS_QUALITY_PROVIDER` / `_MODEL` | Provider + model |
-| `balanced` | checker, synthesizer | `THESIS_BALANCED_PROVIDER` / `_MODEL` | Provider + model |
-| `cheap` | researcher | `THESIS_CHEAP_PROVIDER` / `_MODEL` | Provider + model |
+| Mode | Used by | Env var |
+|---|---|---|
+| `quality` | HEAD planner/supervisor, critic | `THESIS_QUALITY_PROVIDER` / `_MODEL` |
+| `balanced` | checker, synthesizer | `THESIS_BALANCED_PROVIDER` / `_MODEL` |
+| `cheap` | researcher | `THESIS_CHEAP_PROVIDER` / `_MODEL` |
 
-**Fallback:** If a provider fails or has no API key, the next available provider is tried. Health checks are cached for 60 seconds.
+The layer checks provider health (cached 60s), tracks per-session budget, and falls back to any available provider if the preferred one fails or has no API key.
 
 ## Observability
 
-All pipeline stages emit structured JSON via `obs_logger`: session start, stage completion, failures, memory hits, budget traces.
+All events emit structured JSON via `obs_logger`:
+
+- **Session lifecycle**: start, stage completed, stage failed, pipeline completed
+- **Memory**: hit count per retrieval
+- **Budget**: cost per routing call
+- **Traces**: route strategy, latency, success/failure
 
 ## Security Tiers
 
-- **Public**: MCP tools, web search
-- **Sanitized**: Structured data lookups
-- **Trusted**: No external API calls, HEAD-only resolution
+- **Public**: MCP tools (arXiv, Semantic Scholar, CrossRef), web search
+- **Sanitized**: Structured data lookups, internal datasets
+- **Trusted**: HEAD-only resolution, no external API calls, no worker agents
