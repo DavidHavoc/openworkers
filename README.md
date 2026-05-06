@@ -82,7 +82,11 @@ The MCP server talks JSON-RPC over stdin/stdout. Add it to OpenCode's config (gl
   "mcp": {
     "thesis-assistant": {
       "type": "local",
-      "command": ["docker", "compose", "run", "--rm", "-i", "mcp"]
+      "command": [
+        "bash",
+        "-lc",
+        "cd /path/to/openworkers && docker compose run --rm -i mcp"
+      ]
     }
   }
 }
