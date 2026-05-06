@@ -104,17 +104,24 @@ class ThesisOrchestrator:
             budget=budget,
             research_plan=None,
         )
-        self._add_entry("route_decision", {
-            "phase": route.phase,
-            "reason": route.reason,
-            "agents": route.agents_to_run(),
-            "provider_map": {k: list(v) for k, v in route.provider_map.items()},
-        })
+        self._add_entry(
+            "route_decision",
+            {
+                "phase": route.phase,
+                "reason": route.reason,
+                "agents": route.agents_to_run(),
+                "provider_map": {k: list(v) for k, v in route.provider_map.items()},
+            },
+        )
 
-        obs_logger.log_event("thesis_pipeline_started", session_id, {
-            "research_question": research_context.research_question,
-            "discipline": research_context.discipline,
-        })
+        obs_logger.log_event(
+            "thesis_pipeline_started",
+            session_id,
+            {
+                "research_question": research_context.research_question,
+                "discipline": research_context.discipline,
+            },
+        )
 
         # ── Stage 1: HEAD planner ──
         research_plan: Optional[ResearchPlan] = None
@@ -127,11 +134,15 @@ class ThesisOrchestrator:
                 )
                 research_plan = result["output"]
                 self._add_entry("agent_output", result)
-                obs_logger.log_event("stage_completed", session_id, {"stage": "head_planner", "status": "success"})
+                obs_logger.log_event(
+                    "stage_completed", session_id, {"stage": "head_planner", "status": "success"}
+                )
             except Exception as e:
                 errors.append(f"head_planner: {e}")
                 research_plan = _build_placeholder_research_plan(research_context.research_question)
-                obs_logger.log_event("stage_failed", session_id, {"stage": "head_planner", "error": str(e)})
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "head_planner", "error": str(e)}
+                )
         else:
             research_plan = _build_placeholder_research_plan(research_context.research_question)
             obs_logger.log_event("stage_skipped", session_id, {"stage": "head_planner"})
@@ -142,9 +153,12 @@ class ThesisOrchestrator:
             memory_brief = self.memory.retrieve_guidance(
                 research_context.research_question, task_type="thesis"
             )
-            self._add_entry("memory_guidance", {
-                "guidance": memory_brief.to_formatted_string(),
-            })
+            self._add_entry(
+                "memory_guidance",
+                {
+                    "guidance": memory_brief.to_formatted_string(),
+                },
+            )
             obs_logger.log_memory_hit(session_id, "thesis", memory_brief.similar_past_tasks_count)
         except Exception as e:
             errors.append(f"memory_retrieval: {e}")
@@ -157,27 +171,42 @@ class ThesisOrchestrator:
                 raw_papers = await self._search_literature_from_plan(research_plan)
                 if raw_papers:
                     deduped = self._deduplicate_papers(raw_papers)
-                    self._add_entry("lit_search", {
-                        "query": research_plan.search_lanes[0].get("query", "") if research_plan.search_lanes else "",
-                        "source": research_plan.search_lanes[0].get("source", "") if research_plan.search_lanes else "",
-                        "raw_results": len(raw_papers),
-                        "deduplicated": len(deduped),
-                        "papers": [p if isinstance(p, dict) else p.model_dump() for p in deduped],
-                    })
+                    self._add_entry(
+                        "lit_search",
+                        {
+                            "query": (
+                                research_plan.search_lanes[0].get("query", "")
+                                if research_plan.search_lanes
+                                else ""
+                            ),
+                            "source": (
+                                research_plan.search_lanes[0].get("source", "")
+                                if research_plan.search_lanes
+                                else ""
+                            ),
+                            "raw_results": len(raw_papers),
+                            "deduplicated": len(deduped),
+                            "papers": [
+                                p if isinstance(p, dict) else p.model_dump() for p in deduped
+                            ],
+                        },
+                    )
                     search_context = self._get_entries()
                 else:
                     search_context = self._get_entries()
 
-                result = await self.researcher.execute(
-                    task, {"blackboard_entries": search_context}
-                )
+                result = await self.researcher.execute(task, {"blackboard_entries": search_context})
                 lit_map = result["output"]
                 self._add_entry("lit_map", lit_map.model_dump())
-                obs_logger.log_event("stage_completed", session_id, {"stage": "researcher", "status": "success"})
+                obs_logger.log_event(
+                    "stage_completed", session_id, {"stage": "researcher", "status": "success"}
+                )
             except Exception as e:
                 errors.append(f"researcher: {e}")
                 lit_map = _build_placeholder_lit_map(research_context.research_question)
-                obs_logger.log_event("stage_failed", session_id, {"stage": "researcher", "error": str(e)})
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "researcher", "error": str(e)}
+                )
         else:
             lit_map = _build_placeholder_lit_map(research_context.research_question)
             obs_logger.log_event("stage_skipped", session_id, {"stage": "researcher"})
@@ -191,11 +220,15 @@ class ThesisOrchestrator:
                 )
                 citation_audit = result["output"]
                 self._add_entry("citation_audit", citation_audit.model_dump())
-                obs_logger.log_event("stage_completed", session_id, {"stage": "checker", "status": "success"})
+                obs_logger.log_event(
+                    "stage_completed", session_id, {"stage": "checker", "status": "success"}
+                )
             except Exception as e:
                 errors.append(f"checker: {e}")
                 citation_audit = _build_placeholder_citation_audit()
-                obs_logger.log_event("stage_failed", session_id, {"stage": "checker", "error": str(e)})
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "checker", "error": str(e)}
+                )
         else:
             citation_audit = _build_placeholder_citation_audit()
             obs_logger.log_event("stage_skipped", session_id, {"stage": "checker"})
@@ -208,17 +241,24 @@ class ThesisOrchestrator:
                     task, {"blackboard_entries": self._get_entries()}
                 )
                 synthesis_report = result["output"]
-                self._add_entry("status", {
-                    "entry_type": "synthesis_report",
-                    "content": synthesis_report.model_dump(),
-                })
-                obs_logger.log_event("stage_completed", session_id, {"stage": "synthesizer", "status": "success"})
+                self._add_entry(
+                    "status",
+                    {
+                        "entry_type": "synthesis_report",
+                        "content": synthesis_report.model_dump(),
+                    },
+                )
+                obs_logger.log_event(
+                    "stage_completed", session_id, {"stage": "synthesizer", "status": "success"}
+                )
             except Exception as e:
                 errors.append(f"synthesizer: {e}")
                 synthesis_report = _build_placeholder_synthesis_report(
                     research_context.research_question
                 )
-                obs_logger.log_event("stage_failed", session_id, {"stage": "synthesizer", "error": str(e)})
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "synthesizer", "error": str(e)}
+                )
         else:
             synthesis_report = _build_placeholder_synthesis_report(
                 research_context.research_question
@@ -235,15 +275,24 @@ class ThesisOrchestrator:
                 corpus_ctx,
                 student_wc=len(research_context.topic_summary.split()),
             )
-            self._add_entry("corpus_benchmarks", {
-                "benchmarks_text": benchmarks_text,
-                "thesis_count": corpus_ctx.benchmarks.thesis_count if corpus_ctx.benchmarks else 0,
-                "similar_sections": len(corpus_ctx.similar_sections),
-            })
-            obs_logger.log_event("stage_completed", session_id, {"stage": "corpus_retrieval", "status": "success"})
+            self._add_entry(
+                "corpus_benchmarks",
+                {
+                    "benchmarks_text": benchmarks_text,
+                    "thesis_count": (
+                        corpus_ctx.benchmarks.thesis_count if corpus_ctx.benchmarks else 0
+                    ),
+                    "similar_sections": len(corpus_ctx.similar_sections),
+                },
+            )
+            obs_logger.log_event(
+                "stage_completed", session_id, {"stage": "corpus_retrieval", "status": "success"}
+            )
         except Exception as e:
             errors.append(f"corpus_retrieval: {e}")
-            obs_logger.log_event("stage_failed", session_id, {"stage": "corpus_retrieval", "error": str(e)})
+            obs_logger.log_event(
+                "stage_failed", session_id, {"stage": "corpus_retrieval", "error": str(e)}
+            )
 
         # ── Stage 6: Critic ──
         critique: Optional[CritiqueResult] = None
@@ -254,11 +303,15 @@ class ThesisOrchestrator:
                 )
                 critique = result["output"]
                 self._add_entry("critique", critique.model_dump())
-                obs_logger.log_event("stage_completed", session_id, {"stage": "critic", "status": "success"})
+                obs_logger.log_event(
+                    "stage_completed", session_id, {"stage": "critic", "status": "success"}
+                )
             except Exception as e:
                 errors.append(f"critic: {e}")
                 critique = _build_placeholder_critique_result()
-                obs_logger.log_event("stage_failed", session_id, {"stage": "critic", "error": str(e)})
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "critic", "error": str(e)}
+                )
         else:
             critique = _build_placeholder_critique_result()
             obs_logger.log_event("stage_skipped", session_id, {"stage": "critic"})
@@ -274,11 +327,15 @@ class ThesisOrchestrator:
                 )
                 final_critique = result["output"]
                 self._add_entry("critique", final_critique.model_dump())
-                obs_logger.log_event("stage_completed", session_id, {"stage": "head_supervisor", "status": "success"})
+                obs_logger.log_event(
+                    "stage_completed", session_id, {"stage": "head_supervisor", "status": "success"}
+                )
             except Exception as e:
                 errors.append(f"head_supervisor: {e}")
                 final_critique = _build_placeholder_critique_result()
-                obs_logger.log_event("stage_failed", session_id, {"stage": "head_supervisor", "error": str(e)})
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "head_supervisor", "error": str(e)}
+                )
         else:
             final_critique = _build_placeholder_critique_result()
             obs_logger.log_event("stage_skipped", session_id, {"stage": "head_supervisor"})
@@ -309,11 +366,15 @@ class ThesisOrchestrator:
                 task_type="thesis",
                 privacy_tier="public",
                 route=EpisodeRoute(
-                    head_direct=not route.activate_researcher and not route.activate_checker
-                    and not route.activate_synthesizer and not route.activate_critic,
+                    head_direct=not route.activate_researcher
+                    and not route.activate_checker
+                    and not route.activate_synthesizer
+                    and not route.activate_critic,
                     used_middle_tier=bool(middle_agents),
                     used_worker_swarm=bool(worker_agents),
-                    used_mcp_tools=list(self.tool_registry._tools.keys()) if self.tool_registry else [],
+                    used_mcp_tools=(
+                        list(self.tool_registry._tools.keys()) if self.tool_registry else []
+                    ),
                     spawn_count=len(agent_agents),
                 ),
                 models=EpisodeModels(
@@ -340,16 +401,22 @@ class ThesisOrchestrator:
             obs_logger.log_event("store_episode_failed", session_id, {"error": str(e)})
 
         obs_logger.log_trace(session_id, "thesis_pipeline", elapsed_ms, not bool(errors))
-        obs_logger.log_event("thesis_pipeline_completed", session_id, {
-            "session_id": session_id,
-            "stages": 8,
-            "errors": len(errors),
-            "elapsed_ms": elapsed_ms,
-        })
+        obs_logger.log_event(
+            "thesis_pipeline_completed",
+            session_id,
+            {
+                "session_id": session_id,
+                "stages": 8,
+                "errors": len(errors),
+                "elapsed_ms": elapsed_ms,
+            },
+        )
 
         return session
 
-    async def _search_literature_from_plan(self, plan: Optional[ResearchPlan]) -> List[Dict[str, Any]]:
+    async def _search_literature_from_plan(
+        self, plan: Optional[ResearchPlan]
+    ) -> List[Dict[str, Any]]:
         if plan is None or not plan.search_lanes:
             return []
         if self.tool_registry is None:

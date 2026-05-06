@@ -8,13 +8,14 @@ class CorpusAnalyzer:
     def __init__(self, retriever: CorpusRetrieve = None):
         self.retriever = retriever or CorpusRetrieve()
 
-    def analyze(self,
-                query: str,
-                discipline: str,
-                section_type: str = "",
-                student_word_count: int = 0,
-                top_k: int = 5,
-                ) -> CorpusContext:
+    def analyze(
+        self,
+        query: str,
+        discipline: str,
+        section_type: str = "",
+        student_word_count: int = 0,
+        top_k: int = 5,
+    ) -> CorpusContext:
         similar = self.retriever.query_similar_sections(
             query=query,
             discipline=discipline,
@@ -33,7 +34,9 @@ class CorpusAnalyzer:
             benchmarks=benchmarks,
         )
 
-    def format_benchmarks_for_prompt(self, context: CorpusContext, student_wc: int = 0, section_type: str = "") -> str:
+    def format_benchmarks_for_prompt(
+        self, context: CorpusContext, student_wc: int = 0, section_type: str = ""
+    ) -> str:
         lines = ["\n## CORPUS BENCHMARKS (from successful theses)"]
 
         if context.benchmarks and context.benchmarks.section_stats:
@@ -45,8 +48,7 @@ class CorpusAnalyzer:
                 density = stats.get("citation_density_per_1k", 0)
                 subsections = stats.get("common_subsections", [])
                 lines.append(
-                    f"  {stype}: avg {avg_wc} words, "
-                    f"{avg_cc} citations ({density}/1k words)"
+                    f"  {stype}: avg {avg_wc} words, " f"{avg_cc} citations ({density}/1k words)"
                 )
                 if subsections:
                     lines.append(f"    Common subsections: {', '.join(subsections[:5])}")
@@ -54,17 +56,12 @@ class CorpusAnalyzer:
             if student_wc > 0 and section_type and section_type in bs.section_stats:
                 avg = bs.section_stats[section_type].get("avg_word_count", 0)
                 ratio = f"{student_wc}/{avg}" if avg else str(student_wc)
-                lines.append(
-                    f"\nYour {section_type}: {ratio} words "
-                    f"(corpus avg: {avg} words)"
-                )
+                lines.append(f"\nYour {section_type}: {ratio} words " f"(corpus avg: {avg} words)")
 
         if context.similar_sections:
             lines.append("\n## SIMILAR THESIS SECTIONS")
             for i, s in enumerate(context.similar_sections, 1):
-                lines.append(
-                    f"  {i}. [{s.year}] {s.thesis_title[:60]}  -  {s.section_type}"
-                )
+                lines.append(f"  {i}. [{s.year}] {s.thesis_title[:60]}  -  {s.section_type}")
                 lines.append(f"     {s.word_count} words, {s.citation_count} citations")
                 lines.append(f"     Excerpt: {s.text[:120].replace(chr(10), ' ')}...")
                 lines.append("")

@@ -63,9 +63,7 @@ class ThesisEvalHarness:
         r = ThesisEvalResult("Search Recall (crossref_verification)")
         try:
             tool = self.tool_registry.get_tool("crossref_verification")
-            result = await tool.execute(
-                {"doi": "10.1038/nature14539"}, "public"
-            )
+            result = await tool.execute({"doi": "10.1038/nature14539"}, "public")
             if result.get("exists") and "Deep learning" in result.get("title", ""):
                 r.pass_("Known DOI verified  -  CrossRef tool returns correct metadata")
             elif not result.get("exists"):
@@ -78,9 +76,7 @@ class ThesisEvalHarness:
         # Also verify fake DOI is rejected
         try:
             tool = self.tool_registry.get_tool("crossref_verification")
-            result = await tool.execute(
-                {"doi": "10.9999/doesnotexist12345"}, "public"
-            )
+            result = await tool.execute({"doi": "10.9999/doesnotexist12345"}, "public")
             if result.get("exists") is False:
                 if r.passed:
                     r.detail += " | Fake DOI correctly rejected"
@@ -174,7 +170,9 @@ class ThesisEvalHarness:
             if verify.get("exists") is False:
                 r.pass_("Fake DOI correctly rejected by crossref_verification")
             elif "error" in verify:
-                r.pass_(f"DOI tool returned error (API may be limited): {verify.get('error', '')[:80]}")
+                r.pass_(
+                    f"DOI tool returned error (API may be limited): {verify.get('error', '')[:80]}"
+                )
             else:
                 r.fail(f"Fake DOI was accepted: {verify}")
         except Exception as e:
@@ -231,11 +229,13 @@ class ThesisEvalHarness:
 
             for i in range(3):
                 t0 = time.monotonic()
-                _ = await orch.execute(ResearchContext(
-                    research_question=f"Test query {i}",
-                    topic_summary=f"Test topic {i}.",
-                    discipline="computer_science",
-                ))
+                _ = await orch.execute(
+                    ResearchContext(
+                        research_question=f"Test query {i}",
+                        topic_summary=f"Test topic {i}.",
+                        discipline="computer_science",
+                    )
+                )
                 elapsed = time.monotonic() - t0
                 times.append(elapsed)
 

@@ -13,6 +13,7 @@ class EvalTask:
         self.privacy = privacy
         self.complexity = complexity
 
+
 class EvaluationHarness:
     def __init__(self):
         self.memory = EpisodicMemory()
@@ -22,7 +23,7 @@ class EvaluationHarness:
         tasks = [
             EvalTask("Simple local search", "public", "low"),
             EvalTask("Draft architecture review", "sanitized", "medium"),
-            EvalTask("Analyze confidential customer data", "trusted", "high")
+            EvalTask("Analyze confidential customer data", "trusted", "high"),
         ]
 
         results = []
@@ -36,7 +37,9 @@ class EvaluationHarness:
 
             # Note: A true comparison requires forcing the routes.
             # In Mock environments, we just rely on the router heuristic mappings:
-            route_run = await orchestrator.execute_task(UserRequest(query=task.query), privacy_tier=task.privacy)
+            route_run = await orchestrator.execute_task(
+                UserRequest(query=task.query), privacy_tier=task.privacy
+            )
 
             eval_record = {
                 "task": task.query,
@@ -48,6 +51,7 @@ class EvaluationHarness:
             results.append(eval_record)
 
         return results
+
 
 if __name__ == "__main__":
     harness = EvaluationHarness()

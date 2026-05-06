@@ -10,10 +10,12 @@ class HeadProvider(BaseAgentProvider):
     async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
+
 class MiddleProvider(BaseAgentProvider):
     @abstractmethod
     async def execute(self, task: Task, context: Dict[str, Any]) -> Dict[str, Any]:
         pass
+
 
 class WorkerProvider(BaseAgentProvider):
     @abstractmethod

@@ -12,7 +12,11 @@ from core.schemas import BudgetState, MemoryBrief, Task, UserRequest
 def mock_redis(monkeypatch):
     server = fakeredis.FakeServer()
     # Mock redis.from_url to return a FakeRedis instance
-    monkeypatch.setattr("redis.from_url", lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True))
+    monkeypatch.setattr(
+        "redis.from_url",
+        lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True),
+    )
+
 
 def test_schema_validation():
     # Valid
@@ -24,6 +28,7 @@ def test_schema_validation():
     with pytest.raises(ValueError):
         UserRequest(priority=2)
 
+
 def test_blackboard_validation():
     bb = Blackboard()
     # Valid added
@@ -32,6 +37,7 @@ def test_blackboard_validation():
     # Invalid entry type
     with pytest.raises(ValueError):
         bb.add_entry("invalid_type", {"data": "test"})
+
 
 def test_privacy_blocking_routing():
     router = Router()
@@ -44,6 +50,7 @@ def test_privacy_blocking_routing():
     assert decision.strategy == "head_direct"
     assert decision.head_direct is True
     assert decision.workers_allowed is False
+
 
 def test_heuristic_routing_complexity():
     router = Router()
@@ -156,23 +163,27 @@ def test_memory_retrieval():
         EpisodeRoute,
         MemoryEpisode,
     )
+
     # Store a mock dummy
-    memory.store_episode(MemoryEpisode(
-        episode_id="11111111-1111-1111-1111-111111111111",
-        timestamp="2026-04-26",
-        task_summary="test task",
-        task_type="test_type",
-        privacy_tier="public",
-        route=EpisodeRoute(head_direct=True),
-        models=EpisodeModels(),
-        metrics=EpisodeMetrics(),
-        quality=EpisodeQuality(accepted=True)
-    ))
+    memory.store_episode(
+        MemoryEpisode(
+            episode_id="11111111-1111-1111-1111-111111111111",
+            timestamp="2026-04-26",
+            task_summary="test task",
+            task_type="test_type",
+            privacy_tier="public",
+            route=EpisodeRoute(head_direct=True),
+            models=EpisodeModels(),
+            metrics=EpisodeMetrics(),
+            quality=EpisodeQuality(accepted=True),
+        )
+    )
 
     brief = memory.retrieve_guidance("test task", "test_type")
     assert brief.similar_past_tasks_count == 1
     assert "was the most consistently successful pattern" in brief.strongest_successful_pattern
     assert "was the cheapest successful path at" in brief.cheapest_acceptable_pattern
+
 
 @pytest.mark.asyncio
 async def test_orchestrator_happy_path(monkeypatch):

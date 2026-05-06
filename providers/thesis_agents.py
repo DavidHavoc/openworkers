@@ -124,7 +124,11 @@ def _build_placeholder_research_plan(question: str) -> ResearchPlan:
         subquestions=["What does the existing literature say?", "What methodological gaps exist?"],
         strategy="broad_survey",
         search_lanes=[
-            {"query": "placeholder search", "source": "semantic_scholar", "purpose": "initial survey"},
+            {
+                "query": "placeholder search",
+                "source": "semantic_scholar",
+                "purpose": "initial survey",
+            },
         ],
         evidence_needs=["literature review", "methodology assessment"],
         budget_allocation={"max_searches": 5, "max_papers_per_search": 10},
@@ -196,12 +200,18 @@ class ThesisHeadProvider:
         prompt = f"Research Question: {task.description}"
         system_prompt = self.compiler.compile_head_planner(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="quality",
+            prompt=prompt,
+            system_prompt=system_prompt,
+            mode="quality",
             response_schema=_schema_for(ResearchPlan),
         )
 
         if response.dry_run:
-            question = task.research_context.research_question if task.research_context else task.description
+            question = (
+                task.research_context.research_question
+                if task.research_context
+                else task.description
+            )
             plan = _build_placeholder_research_plan(question)
         else:
             plan = _parse_structured_output(response.content, ResearchPlan, _dict_to_research_plan)
@@ -219,18 +229,26 @@ class ThesisHeadProvider:
             "fallback_used": response.fallback_used,
         }
 
-    async def _execute_supervisor(self, task: Task, entries: List[BlackboardEntry]) -> Dict[str, Any]:
-        prompt = f"Review all agent findings and produce a structured critique for: {task.description}"
+    async def _execute_supervisor(
+        self, task: Task, entries: List[BlackboardEntry]
+    ) -> Dict[str, Any]:
+        prompt = (
+            f"Review all agent findings and produce a structured critique for: {task.description}"
+        )
         system_prompt = self.compiler.compile_head_supervisor(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="quality",
+            prompt=prompt,
+            system_prompt=system_prompt,
+            mode="quality",
             response_schema=_schema_for(CritiqueResult),
         )
 
         if response.dry_run:
             critique = _build_placeholder_critique_result()
         else:
-            critique = _parse_structured_output(response.content, CritiqueResult, _dict_to_critique_result)
+            critique = _parse_structured_output(
+                response.content, CritiqueResult, _dict_to_critique_result
+            )
 
         return {
             "tier": "head",
@@ -255,11 +273,15 @@ class ResearcherAgent:
         context = context or {}
         entries: List[BlackboardEntry] = context.get("blackboard_entries", [])
 
-        question = task.research_context.research_question if task.research_context else task.description
+        question = (
+            task.research_context.research_question if task.research_context else task.description
+        )
         prompt = f"Search for papers relevant to: {question}\n\nTask: {task.description}"
         system_prompt = self.compiler.compile_specialist_researcher(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="cheap",
+            prompt=prompt,
+            system_prompt=system_prompt,
+            mode="cheap",
             response_schema=_schema_for(LitMap),
         )
 
@@ -294,14 +316,18 @@ class CheckerAgent:
         prompt = f"Verify all citations and claims for: {task.description}"
         system_prompt = self.compiler.compile_specialist_checker(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="balanced",
+            prompt=prompt,
+            system_prompt=system_prompt,
+            mode="balanced",
             response_schema=_schema_for(CitationAudit),
         )
 
         if response.dry_run:
             audit = _build_placeholder_citation_audit()
         else:
-            audit = _parse_structured_output(response.content, CitationAudit, _dict_to_citation_audit)
+            audit = _parse_structured_output(
+                response.content, CitationAudit, _dict_to_citation_audit
+            )
 
         return {
             "agent": "checker",
@@ -326,10 +352,14 @@ class SynthesizerAgent:
         context = context or {}
         entries: List[BlackboardEntry] = context.get("blackboard_entries", [])
 
-        prompt = f"Extract methods, datasets, and metrics from the literature for: {task.description}"
+        prompt = (
+            f"Extract methods, datasets, and metrics from the literature for: {task.description}"
+        )
         system_prompt = self.compiler.compile_specialist_synthesizer(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="balanced",
+            prompt=prompt,
+            system_prompt=system_prompt,
+            mode="balanced",
             response_schema=_schema_for(SynthesisReport),
         )
 
@@ -337,7 +367,9 @@ class SynthesizerAgent:
             question = task.research_context.research_question if task.research_context else ""
             report = _build_placeholder_synthesis_report(question)
         else:
-            report = _parse_structured_output(response.content, SynthesisReport, _dict_to_synthesis_report)
+            report = _parse_structured_output(
+                response.content, SynthesisReport, _dict_to_synthesis_report
+            )
 
         return {
             "agent": "synthesizer",
@@ -365,14 +397,18 @@ class CriticAgent:
         prompt = f"Critique the research and find counterarguments for: {task.description}"
         system_prompt = self.compiler.compile_specialist_critic(entries)
         response = await self.unified.generate(
-            prompt=prompt, system_prompt=system_prompt, mode="quality",
+            prompt=prompt,
+            system_prompt=system_prompt,
+            mode="quality",
             response_schema=_schema_for(CritiqueResult),
         )
 
         if response.dry_run:
             critique = _build_placeholder_critique_result()
         else:
-            critique = _parse_structured_output(response.content, CritiqueResult, _dict_to_critique_result)
+            critique = _parse_structured_output(
+                response.content, CritiqueResult, _dict_to_critique_result
+            )
 
         return {
             "agent": "critic",
@@ -480,15 +516,17 @@ def _list_literature_results(val: Any) -> List[LiteratureResult]:
     for item in val:
         if not isinstance(item, dict):
             continue
-        results.append(LiteratureResult(
-            paper_id=str(item.get("paper_id", "")),
-            title=str(item.get("title", "")),
-            authors=_list_str(item.get("authors")),
-            year=int(item.get("year", 0)),
-            abstract=str(item.get("abstract", "")),
-            url=str(item.get("url", "")),
-            source=str(item.get("source", "")),
-            citation_count=int(item.get("citation_count", 0)),
-            extracted_claims=_list_str(item.get("extracted_claims")),
-        ))
+        results.append(
+            LiteratureResult(
+                paper_id=str(item.get("paper_id", "")),
+                title=str(item.get("title", "")),
+                authors=_list_str(item.get("authors")),
+                year=int(item.get("year", 0)),
+                abstract=str(item.get("abstract", "")),
+                url=str(item.get("url", "")),
+                source=str(item.get("source", "")),
+                citation_count=int(item.get("citation_count", 0)),
+                extracted_claims=_list_str(item.get("extracted_claims")),
+            )
+        )
     return results

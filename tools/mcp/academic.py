@@ -55,7 +55,7 @@ async def _request_with_retry(
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
             last_exc = e
             if attempt < max_retries:
-                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                delay = _RETRY_BASE_DELAY * (2**attempt)
                 await asyncio.sleep(delay)
             else:
                 raise last_exc
@@ -121,17 +121,29 @@ class ArxivSearchTool(MCPTool):
             raw = resp.text
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response.text else ""
-            return {"papers": [], "total_results": 0, "error": f"arXiv API returned {e.response.status_code}: {body}"}
+            return {
+                "papers": [],
+                "total_results": 0,
+                "error": f"arXiv API returned {e.response.status_code}: {body}",
+            }
         except httpx.RequestError as e:
             return {"papers": [], "total_results": 0, "error": f"arXiv API request failed: {e}"}
 
         try:
             root = ET.fromstring(raw)
         except ET.ParseError as e:
-            return {"papers": [], "total_results": 0, "error": f"Failed to parse arXiv response: {str(e)}"}
+            return {
+                "papers": [],
+                "total_results": 0,
+                "error": f"Failed to parse arXiv response: {str(e)}",
+            }
 
         total_results_elem = root.find("opensearch:totalResults", ARXIV_NAMESPACES)
-        total_results = int(total_results_elem.text) if total_results_elem is not None and total_results_elem.text else 0
+        total_results = (
+            int(total_results_elem.text)
+            if total_results_elem is not None and total_results_elem.text
+            else 0
+        )
 
         papers: List[Dict[str, Any]] = []
         for entry in root.findall("atom:entry", ARXIV_NAMESPACES):
@@ -155,7 +167,11 @@ class ArxivSearchTool(MCPTool):
             return authors
 
         arxiv_id_full = _text("id")
-        arxiv_id = arxiv_id_full.split("/abs/")[-1] if "/abs/" in arxiv_id_full else arxiv_id_full.rsplit("/", 1)[-1]
+        arxiv_id = (
+            arxiv_id_full.split("/abs/")[-1]
+            if "/abs/" in arxiv_id_full
+            else arxiv_id_full.rsplit("/", 1)[-1]
+        )
 
         published = _text("published")
         year = 0
@@ -193,7 +209,9 @@ class ArxivSearchTool(MCPTool):
 
 class SemanticScholarSearchTool(MCPTool):
     name = "semantic_scholar_search"
-    description = "Queries the Semantic Scholar API and returns papers with DOIs and citation counts."
+    description = (
+        "Queries the Semantic Scholar API and returns papers with DOIs and citation counts."
+    )
     allowed_tiers = ["public", "sanitized", "trusted"]
     timeout = 20
 
@@ -250,7 +268,11 @@ class SemanticScholarSearchTool(MCPTool):
             data = resp.json()
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response.text else ""
-            return {"papers": [], "total": 0, "error": f"Semantic Scholar API returned {e.response.status_code}: {body}"}
+            return {
+                "papers": [],
+                "total": 0,
+                "error": f"Semantic Scholar API returned {e.response.status_code}: {body}",
+            }
         except httpx.RequestError as e:
             return {"papers": [], "total": 0, "error": f"Semantic Scholar API request failed: {e}"}
         except json.JSONDecodeError:
@@ -266,17 +288,19 @@ class SemanticScholarSearchTool(MCPTool):
                 continue
 
             url_value = item.get("url", "") or f"https://www.semanticscholar.org/paper/{paper_id}"
-            papers.append({
-                "paper_id": paper_id,
-                "title": title,
-                "authors": [a.get("name", "") for a in (item.get("authors") or [])],
-                "year": item.get("year") or 0,
-                "abstract": item.get("abstract", "") or "",
-                "url": url_value,
-                "doi": doi,
-                "citation_count": item.get("citationCount", 0) or 0,
-                "source": "semantic_scholar",
-            })
+            papers.append(
+                {
+                    "paper_id": paper_id,
+                    "title": title,
+                    "authors": [a.get("name", "") for a in (item.get("authors") or [])],
+                    "year": item.get("year") or 0,
+                    "abstract": item.get("abstract", "") or "",
+                    "url": url_value,
+                    "doi": doi,
+                    "citation_count": item.get("citationCount", 0) or 0,
+                    "source": "semantic_scholar",
+                }
+            )
 
         total = data.get("total", len(papers))
         return {"papers": papers, "total": total}
@@ -284,7 +308,9 @@ class SemanticScholarSearchTool(MCPTool):
 
 class CrossRefVerificationTool(MCPTool):
     name = "crossref_verification"
-    description = "Verifies a DOI exists via the CrossRef API. Returns real metadata or {exists: false}."
+    description = (
+        "Verifies a DOI exists via the CrossRef API. Returns real metadata or {exists: false}."
+    )
     allowed_tiers = ["public", "sanitized", "trusted"]
     timeout = 15
 
@@ -326,7 +352,11 @@ class CrossRefVerificationTool(MCPTool):
             if e.response.status_code == 404:
                 return {"exists": False, "doi": doi}
             body = e.response.text[:300] if e.response.text else ""
-            return {"exists": False, "doi": doi, "error": f"CrossRef API returned {e.response.status_code}: {body}"}
+            return {
+                "exists": False,
+                "doi": doi,
+                "error": f"CrossRef API returned {e.response.status_code}: {body}",
+            }
         except httpx.RequestError as e:
             return {"exists": False, "doi": doi, "error": f"CrossRef API request failed: {e}"}
 

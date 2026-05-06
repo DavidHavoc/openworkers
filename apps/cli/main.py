@@ -135,6 +135,7 @@ async def cmd_resume(args):
 
 async def cmd_corpus(args):
     from core.corpus.ingest import CorpusIngest
+
     ingester = CorpusIngest()
     sections = ingester.ingest_pdf(
         filepath=args.path,
@@ -176,7 +177,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_research = sub.add_parser("research", help="Full pipeline: search, classify, audit, critique")
     p_research.add_argument("question", type=str, help="Research question")
     p_research.add_argument("--summary", type=str, default="", help="Topic summary")
-    p_research.add_argument("--discipline", type=str, default="general", help="e.g. computer_science")
+    p_research.add_argument(
+        "--discipline", type=str, default="general", help="e.g. computer_science"
+    )
     p_research.add_argument("--knowledge", type=str, default="", help="What you already know")
     p_research.add_argument("--need", type=str, default="", help="What you need help with")
     add_output_args(p_research)
@@ -192,7 +195,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_papers = sub.add_parser("papers", help="Quick literature search, no LLM")
     p_papers.add_argument("query", type=str, help="Search query")
-    p_papers.add_argument("--source", type=str, default="semantic_scholar", choices=["arxiv", "semantic_scholar"])
+    p_papers.add_argument(
+        "--source", type=str, default="semantic_scholar", choices=["arxiv", "semantic_scholar"]
+    )
     p_papers.add_argument("--limit", type=int, default=10)
     add_output_args(p_papers)
 

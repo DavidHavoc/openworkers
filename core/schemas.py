@@ -8,14 +8,17 @@ class UserRequest(BaseModel):
     session_id: Optional[str] = None
     priority: int = 1
 
+
 class SessionState(BaseModel):
     session_id: str
     status: str
     current_task_id: Optional[str] = None
     created_at: str
 
+
 class ResearchContext(BaseModel):
     """What the student gives: their idea + what they need."""
+
     research_question: str
     topic_summary: str
     discipline: str
@@ -23,8 +26,10 @@ class ResearchContext(BaseModel):
     what_they_need: str = ""
     language: str = "en"
 
+
 class ResearchPlan(BaseModel):
     """Output of HEAD planner: subquestions, search lanes, evidence needs, budget."""
+
     plan_id: str
     research_question: str
     subquestions: List[str] = Field(default_factory=list)
@@ -34,8 +39,10 @@ class ResearchPlan(BaseModel):
     budget_allocation: Dict[str, Any] = Field(default_factory=dict)
     suggested_methodology: str = ""
 
+
 class LiteratureResult(BaseModel):
     """A single paper from a search, with verified metadata."""
+
     paper_id: str
     title: str
     authors: List[str]
@@ -46,8 +53,10 @@ class LiteratureResult(BaseModel):
     citation_count: int = 0
     extracted_claims: List[str] = Field(default_factory=list)
 
+
 class LitMap(BaseModel):
     """Papers classified by relationship to student's idea."""
+
     research_question: str
     supporting: List[LiteratureResult] = Field(default_factory=list)
     challenging: List[LiteratureResult] = Field(default_factory=list)
@@ -55,8 +64,10 @@ class LitMap(BaseModel):
     total_found: int
     search_query_used: str
 
+
 class CritiqueResult(BaseModel):
     """Structured critique  -  never prose generation."""
+
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
     gaps: List[str] = Field(default_factory=list)
@@ -65,8 +76,10 @@ class CritiqueResult(BaseModel):
     methodological_notes: List[str] = Field(default_factory=list)
     overall_assessment: str = ""
 
+
 class SynthesisReport(BaseModel):
     """Extracted methods/datasets/metrics from papers, corpus comparisons."""
+
     research_question: str = ""
     method_summary: Dict[str, List[str]] = Field(default_factory=dict)
     dataset_summary: Dict[str, Any] = Field(default_factory=dict)
@@ -75,6 +88,7 @@ class SynthesisReport(BaseModel):
     recommended_reading: List[Dict[str, str]] = Field(default_factory=list)
     cross_paper_comparisons: List[Dict[str, Any]] = Field(default_factory=list)
 
+
 class CitationAudit(BaseModel):
     claims_checked: int
     verified_claims: int
@@ -82,6 +96,7 @@ class CitationAudit(BaseModel):
     weak_citations: List[str] = Field(default_factory=list)
     contested_claims: List[str] = Field(default_factory=list)
     bibtex_entries: Dict[str, str] = Field(default_factory=dict)
+
 
 class ResearchSession(BaseModel):
     session_id: str
@@ -94,6 +109,7 @@ class ResearchSession(BaseModel):
     created_at: str
     status: str = "complete"
 
+
 class CorpusSection(BaseModel):
     section_id: str
     thesis_id: str
@@ -101,20 +117,25 @@ class CorpusSection(BaseModel):
     discipline: str
     university: str = ""
     year: int = 0
-    section_type: str = ""  # introduction | methodology | literature_review | results | discussion | conclusion
+    section_type: str = (
+        ""  # introduction | methodology | literature_review | results | discussion | conclusion
+    )
     heading: str = ""
     text: str
     word_count: int = 0
     citation_count: int = 0
+
 
 class CorpusStats(BaseModel):
     discipline: str
     thesis_count: int = 0
     section_stats: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
+
 class CorpusContext(BaseModel):
     similar_sections: List[CorpusSection] = Field(default_factory=list)
     benchmarks: Optional[CorpusStats] = None
+
 
 class Task(BaseModel):
     task_id: str
@@ -124,6 +145,7 @@ class Task(BaseModel):
     status: str = "pending"
     research_context: Optional[ResearchContext] = None
 
+
 class BlackboardEntry(BaseModel):
     entry_id: str
     entry_type: str  # task, evidence, output, route_decision
@@ -131,17 +153,20 @@ class BlackboardEntry(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     timestamp: str
 
+
 class EvidenceRef(BaseModel):
     evidence_id: str
     source: str
     summary: str
     confidence: float
 
+
 class AgentOutput(BaseModel):
     agent_id: str
     tier: str
     result: Any
     confidence: float
+
 
 class RouteDecision(BaseModel):
     strategy: str
@@ -150,20 +175,24 @@ class RouteDecision(BaseModel):
     middle_allowed: bool = False
     rationale: str
 
+
 class BudgetState(BaseModel):
     remaining_usd: float
     spent_usd: float
     token_limit: int
+
 
 class EvalResult(BaseModel):
     passed: bool
     score: float
     feedback: str
 
+
 class PrivacyPolicyDecision(BaseModel):
     privacy_tier: str  # public, sanitized, trusted
     is_blocked: bool
     reason: str
+
 
 # Schema for compact routing episodes stored in memory
 class EpisodeRoute(BaseModel):
@@ -173,16 +202,19 @@ class EpisodeRoute(BaseModel):
     used_mcp_tools: List[str] = Field(default_factory=list)
     spawn_count: int = 0
 
+
 class EpisodeModels(BaseModel):
     head: Optional[str] = None
     middle: List[str] = Field(default_factory=list)
     workers: List[str] = Field(default_factory=list)
+
 
 class EpisodeMetrics(BaseModel):
     latency_ms: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
+
 
 class EpisodeQuality(BaseModel):
     score: float = 0.0
@@ -191,8 +223,10 @@ class EpisodeQuality(BaseModel):
     needed_head_correction: bool = False
     confidence: float = 0.0
 
+
 class MemoryEpisode(BaseModel):
     """Compact routing episode schema to be stored in history."""
+
     episode_id: str
     timestamp: str
     task_summary: str
@@ -205,6 +239,7 @@ class MemoryEpisode(BaseModel):
     failures: List[str] = Field(default_factory=list)
     notes: List[str] = Field(default_factory=list)
     routing_takeaway: str = ""
+
 
 class MemoryBrief(BaseModel):
     similar_past_tasks_count: int = 0

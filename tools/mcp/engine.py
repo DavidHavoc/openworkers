@@ -9,6 +9,7 @@ from duckduckgo_search import DDGS
 
 class MCPTool(ABC):
     """Base class for MCP-style tools."""
+
     name: str = "base_tool"
     description: str = "Base description"
     allowed_tiers: list[str] = ["public", "sanitized", "trusted"]
@@ -34,7 +35,9 @@ class MCPTool(ABC):
             return {"error": error_msg}
 
         start_time = time.time()
-        logging.info(f"AUDIT: Executing tool '{self.name}' under tier '{privacy_tier}' with params: {params}")
+        logging.info(
+            f"AUDIT: Executing tool '{self.name}' under tier '{privacy_tier}' with params: {params}"
+        )
 
         try:
             # In a real system, you'd wrap this in asyncio.wait_for(..., self.timeout)
@@ -54,10 +57,17 @@ class WebSearchTool(MCPTool):
     timeout = 15
 
     def get_input_schema(self) -> dict[str, Any]:
-        return {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+        return {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        }
 
     def get_output_schema(self) -> dict[str, Any]:
-        return {"type": "object", "properties": {"results": {"type": "array", "items": {"type": "string"}}}}
+        return {
+            "type": "object",
+            "properties": {"results": {"type": "array", "items": {"type": "string"}}},
+        }
 
     async def execute_impl(self, params: dict[str, Any]) -> dict[str, Any]:
         query = params.get("query")
@@ -71,8 +81,7 @@ class WebSearchTool(MCPTool):
         try:
             results = await asyncio.to_thread(_search)
             formatted_results = [
-                f"{r.get('title', '')} - {r.get('body', '')} ({r.get('href', '')})"
-                for r in results
+                f"{r.get('title', '')} - {r.get('body', '')} ({r.get('href', '')})" for r in results
             ]
             return {"results": formatted_results}
         except Exception as e:
@@ -86,7 +95,11 @@ class KnowledgeRetrievalTool(MCPTool):
     timeout = 5
 
     def get_input_schema(self) -> dict[str, Any]:
-        return {"type": "object", "properties": {"doc_id": {"type": "string"}}, "required": ["doc_id"]}
+        return {
+            "type": "object",
+            "properties": {"doc_id": {"type": "string"}},
+            "required": ["doc_id"],
+        }
 
     def get_output_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {"content": {"type": "string"}}}
@@ -102,7 +115,11 @@ class StructuredDataLookupTool(MCPTool):
     timeout = 10
 
     def get_input_schema(self) -> dict[str, Any]:
-        return {"type": "object", "properties": {"metric": {"type": "string"}}, "required": ["metric"]}
+        return {
+            "type": "object",
+            "properties": {"metric": {"type": "string"}},
+            "required": ["metric"],
+        }
 
     def get_output_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {"value": {"type": "number"}}}
@@ -135,9 +152,11 @@ class ToolRegistry:
         available = []
         for name, tool in self._tools.items():
             if privacy_tier in tool.allowed_tiers:
-                available.append({
-                    "name": name,
-                    "description": tool.description,
-                    "schema": tool.get_input_schema(),
-                })
+                available.append(
+                    {
+                        "name": name,
+                        "description": tool.description,
+                        "schema": tool.get_input_schema(),
+                    }
+                )
         return available

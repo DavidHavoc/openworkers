@@ -11,6 +11,7 @@ class EpisodicMemory:
     Manages long-term storage and retrieval of routing episodes for heuristic induction.
     Uses Qdrant vector database for semantic retrieval via FastEmbed.
     """
+
     def __init__(self, qdrant_location: Optional[str] = None):
         qdrant_url = os.environ.get("QDRANT_URL")
         if qdrant_url:
@@ -28,7 +29,7 @@ class EpisodicMemory:
         if not self.client.collection_exists(collection_name=self.collection_name):
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=self.client.get_fastembed_vector_params()
+                vectors_config=self.client.get_fastembed_vector_params(),
             )
 
     def store_episode(self, episode: MemoryEpisode):
@@ -37,7 +38,7 @@ class EpisodicMemory:
             collection_name=self.collection_name,
             documents=[episode.task_summary],
             metadata=[episode.model_dump(exclude={"task_summary"})],
-            ids=[episode.episode_id]
+            ids=[episode.episode_id],
         )
 
     def retrieve_guidance(self, task: str, task_type: str = "general") -> MemoryBrief:
@@ -46,9 +47,7 @@ class EpisodicMemory:
         """
         # Search Qdrant
         search_results = self.client.query(
-            collection_name=self.collection_name,
-            query_text=task,
-            limit=5
+            collection_name=self.collection_name, query_text=task, limit=5
         )
 
         # In Qdrant, results are returned as QueryResponse objects
@@ -56,14 +55,12 @@ class EpisodicMemory:
         for result in search_results:
             # Reconstruct the episode from metadata
             # qdrant 'add' method sets metadata in 'payload'
-            if result.score > 0.8: # Filter out low similarity
+            if result.score > 0.8:  # Filter out low similarity
                 meta = result.metadata
                 meta["task_summary"] = result.document
                 relevant_episodes.append(MemoryEpisode.model_validate(meta))
 
-        brief = MemoryBrief(
-            similar_past_tasks_count=len(relevant_episodes)
-        )
+        brief = MemoryBrief(similar_past_tasks_count=len(relevant_episodes))
 
         if len(relevant_episodes) == 0:
             return brief
@@ -82,7 +79,9 @@ class EpisodicMemory:
                 route_counts[route_str] = route_counts.get(route_str, 0) + 1
             most_common = max(route_counts, key=route_counts.get)
 
-            brief.strongest_successful_pattern = f"Route {most_common} was the most consistently successful pattern."
+            brief.strongest_successful_pattern = (
+                f"Route {most_common} was the most consistently successful pattern."
+            )
 
             cheapest = sorted(successful, key=lambda x: x.metrics.estimated_cost_usd)[0]
             brief.cheapest_acceptable_pattern = f"Route {cheapest.route.model_dump()} was the cheapest successful path at ${cheapest.metrics.estimated_cost_usd:.4f}."
@@ -98,6 +97,8 @@ class EpisodicMemory:
             brief.recommended_routing_bias = "Try worker swarm to gather more information."
 
         if failures:
-            brief.common_failure_mode = failures[-1].failures[0] if failures[-1].failures else "Model drifted off-topic."
+            brief.common_failure_mode = (
+                failures[-1].failures[0] if failures[-1].failures else "Model drifted off-topic."
+            )
 
         return brief

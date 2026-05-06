@@ -9,9 +9,18 @@ from core.schemas import CorpusSection
 
 SECTION_PATTERNS = [
     (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?introduction\s*$", "introduction"),
-    (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:literature\s+review|related\s+work|background)\s*$", "literature_review"),
-    (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:methodology|methods|experimental\s+setup|approach)\s*$", "methodology"),
-    (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:results|findings|experiments|evaluation)\s*$", "results"),
+    (
+        r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:literature\s+review|related\s+work|background)\s*$",
+        "literature_review",
+    ),
+    (
+        r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:methodology|methods|experimental\s+setup|approach)\s*$",
+        "methodology",
+    ),
+    (
+        r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:results|findings|experiments|evaluation)\s*$",
+        "results",
+    ),
     (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:discussion|analysis)\s*$", "discussion"),
     (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?(?:conclusion|summary|future\s+work)\s*$", "conclusion"),
 ]
@@ -20,7 +29,9 @@ HEADING_RE = re.compile(
     r"(?m)^(?:(?:#{1,3}\s*)|(?:\d+(?:\.\d+)*\s+)|(?:CHAPTER\s+\d+\s*)|(?:[IVX]+\.\s*))(.+)$"
 )
 
-CITATION_RE = re.compile(r"\[\d+\]|\[\d+[,\s\-]+\d+\]|\(\w+\s+\d{4}\)|\(\d{4}\)|\\cite\{[^}]*\}|\\citep\{[^}]*\}")
+CITATION_RE = re.compile(
+    r"\[\d+\]|\[\d+[,\s\-]+\d+\]|\(\w+\s+\d{4}\)|\(\d{4}\)|\\cite\{[^}]*\}|\\citep\{[^}]*\}"
+)
 
 
 def _detect_section_type(heading: str) -> str:
@@ -31,11 +42,29 @@ def _detect_section_type(heading: str) -> str:
     lower = h.lower()
     if any(kw in lower for kw in ("intro", "background", "overview", "motivation", "context")):
         return "introduction"
-    if any(kw in lower for kw in ("related", "literature", "prior", "previous work", "state of the art")):
+    if any(
+        kw in lower
+        for kw in ("related", "literature", "prior", "previous work", "state of the art")
+    ):
         return "literature_review"
-    if any(kw in lower for kw in ("method", "approach", "design", "procedure", "protocol", "architecture", "framework", "setup")):
+    if any(
+        kw in lower
+        for kw in (
+            "method",
+            "approach",
+            "design",
+            "procedure",
+            "protocol",
+            "architecture",
+            "framework",
+            "setup",
+        )
+    ):
         return "methodology"
-    if any(kw in lower for kw in ("experiment", "result", "evaluation", "finding", "performance", "outcome")):
+    if any(
+        kw in lower
+        for kw in ("experiment", "result", "evaluation", "finding", "performance", "outcome")
+    ):
         return "results"
     if any(kw in lower for kw in ("discuss", "analysis", "implication", "limitation")):
         return "discussion"
@@ -65,13 +94,15 @@ def _split_sections(text: str) -> List[dict]:
             if current_lines or sections:
                 body = "\n".join(current_lines).strip()
                 if len(body.split()) >= 3:
-                    sections.append({
-                        "heading": current_heading,
-                        "section_type": current_type,
-                        "text": body,
-                        "word_count": len(body.split()),
-                        "citation_count": _count_citations(body),
-                    })
+                    sections.append(
+                        {
+                            "heading": current_heading,
+                            "section_type": current_type,
+                            "text": body,
+                            "word_count": len(body.split()),
+                            "citation_count": _count_citations(body),
+                        }
+                    )
             current_heading = heading_text
             current_type = _detect_section_type(heading_text)
             current_lines = []
@@ -80,13 +111,15 @@ def _split_sections(text: str) -> List[dict]:
 
     body = "\n".join(current_lines).strip()
     if len(body.split()) >= 3:
-        sections.append({
-            "heading": current_heading,
-            "section_type": current_type,
-            "text": body,
-            "word_count": len(body.split()),
-            "citation_count": _count_citations(body),
-        })
+        sections.append(
+            {
+                "heading": current_heading,
+                "section_type": current_type,
+                "text": body,
+                "word_count": len(body.split()),
+                "citation_count": _count_citations(body),
+            }
+        )
 
     return sections
 
@@ -94,6 +127,7 @@ def _split_sections(text: str) -> List[dict]:
 def _extract_text_from_pdf(filepath: str) -> str:
     try:
         import fitz
+
         doc = fitz.open(filepath)
         text = ""
         for page in doc:
@@ -196,6 +230,7 @@ class CorpusIngest:
             )
         except Exception as e:
             import sys
+
             print(f"[CorpusIngest] add failed: {e}", file=sys.stderr)
             raise
 

@@ -93,10 +93,7 @@ class CorpusRetrieve:
         for stype, data in section_stats.items():
             count = data["section_count"]
             thesis_count = max(stats.thesis_count, 1)
-            common_headings = [
-                h for h, n in data["headings"].items()
-                if n / thesis_count > 0.5
-            ]
+            common_headings = [h for h, n in data["headings"].items() if n / thesis_count > 0.5]
             stats.section_stats[stype] = {
                 "section_count": count,
                 "avg_word_count": round(data["total_word_count"] / max(count, 1)),

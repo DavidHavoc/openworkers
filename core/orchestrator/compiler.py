@@ -57,12 +57,14 @@ class PromptCompiler:
                 if rc and isinstance(rc, dict):
                     research_contexts.append(rc)
             elif entry_type == "agent_output":
-                agent_outputs.append({
-                    "agent_id": content.get("agent_id", ""),
-                    "tier": content.get("tier", ""),
-                    "result": content.get("result", {}),
-                    "confidence": content.get("confidence", 0),
-                })
+                agent_outputs.append(
+                    {
+                        "agent_id": content.get("agent_id", ""),
+                        "tier": content.get("tier", ""),
+                        "result": content.get("result", {}),
+                        "confidence": content.get("confidence", 0),
+                    }
+                )
             elif entry_type == "memory_guidance" or entry_type == "route_decision":
                 guidance = content.get("guidance") or content.get("rationale")
                 if guidance:
@@ -70,11 +72,13 @@ class PromptCompiler:
                 if entry_type == "route_decision":
                     route_decisions.append(content)
             elif entry_type == "evidence_ref":
-                evidence_refs.append({
-                    "source": content.get("source", ""),
-                    "summary": content.get("summary", ""),
-                    "confidence": content.get("confidence", 0),
-                })
+                evidence_refs.append(
+                    {
+                        "source": content.get("source", ""),
+                        "summary": content.get("summary", ""),
+                        "confidence": content.get("confidence", 0),
+                    }
+                )
             elif entry_type == "lit_map":
                 lit_map_entries.append(content)
             elif entry_type == "critique":
@@ -108,19 +112,46 @@ class PromptCompiler:
         context: Dict[str, str] = {}
 
         context["task_context"] = _fmt_section("TASKS", task_entries) or "No tasks found."
-        context["research_context"] = _fmt_section("RESEARCH CONTEXT", research_contexts) or "No research context found."
-        context["agent_outputs"] = _fmt_section("AGENT OUTPUTS", agent_outputs) or "No agent outputs yet."
-        context["memory_guidance"] = _fmt_list_section("MEMORY GUIDANCE", memory_guidance) or "No memory guidance."
-        context["lit_map"] = _fmt_section("LITERATURE MAP", lit_map_entries) or "No literature map yet."
-        context["synthesis_report"] = _fmt_section("SYNTHESIS REPORT", synthesis_entries) or "No synthesis report yet."
-        context["citation_audit"] = _fmt_section("CITATION AUDIT", citation_audit_entries) or "No citation audit yet."
-        context["prior_critiques"] = _fmt_section("PRIOR CRITIQUES", critique_entries) or "No prior critiques."
-        context["search_queries"] = json.dumps(
-            [{"query": e.get("query", ""), "source": e.get("source", "")} for e in lit_search_entries],
-            indent=2,
-        ) if lit_search_entries else "No search queries yet."
-        context["draft_claims"] = _fmt_section("DRAFT CLAIMS", evidence_refs) or "No claims to check."
-        context["corpus_benchmarks"] = "\n".join(corpus_benchmark_entries) if corpus_benchmark_entries else "No corpus data available."
+        context["research_context"] = (
+            _fmt_section("RESEARCH CONTEXT", research_contexts) or "No research context found."
+        )
+        context["agent_outputs"] = (
+            _fmt_section("AGENT OUTPUTS", agent_outputs) or "No agent outputs yet."
+        )
+        context["memory_guidance"] = (
+            _fmt_list_section("MEMORY GUIDANCE", memory_guidance) or "No memory guidance."
+        )
+        context["lit_map"] = (
+            _fmt_section("LITERATURE MAP", lit_map_entries) or "No literature map yet."
+        )
+        context["synthesis_report"] = (
+            _fmt_section("SYNTHESIS REPORT", synthesis_entries) or "No synthesis report yet."
+        )
+        context["citation_audit"] = (
+            _fmt_section("CITATION AUDIT", citation_audit_entries) or "No citation audit yet."
+        )
+        context["prior_critiques"] = (
+            _fmt_section("PRIOR CRITIQUES", critique_entries) or "No prior critiques."
+        )
+        context["search_queries"] = (
+            json.dumps(
+                [
+                    {"query": e.get("query", ""), "source": e.get("source", "")}
+                    for e in lit_search_entries
+                ],
+                indent=2,
+            )
+            if lit_search_entries
+            else "No search queries yet."
+        )
+        context["draft_claims"] = (
+            _fmt_section("DRAFT CLAIMS", evidence_refs) or "No claims to check."
+        )
+        context["corpus_benchmarks"] = (
+            "\n".join(corpus_benchmark_entries)
+            if corpus_benchmark_entries
+            else "No corpus data available."
+        )
 
         context["max_searches"] = str(5)
         context["max_papers_per_search"] = str(10)

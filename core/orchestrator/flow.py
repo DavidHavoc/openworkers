@@ -35,14 +35,14 @@ class TaskOrchestrator:
         self.middle_provider = ConfigurableMiddleProvider()
         self.worker_provider = ConfigurableWorkerProvider()
 
-    async def execute_task(self, request: UserRequest, privacy_tier: str = "sanitized") -> Dict[str, Any]:
+    async def execute_task(
+        self, request: UserRequest, privacy_tier: str = "sanitized"
+    ) -> Dict[str, Any]:
         start_time = time.time()
 
         session_id = request.session_id or str(uuid.uuid4())
         session = SessionState(
-            session_id=session_id,
-            status="running",
-            created_at=datetime.utcnow().isoformat() + "Z"
+            session_id=session_id, status="running", created_at=datetime.utcnow().isoformat() + "Z"
         )
 
         task_id = str(uuid.uuid4())
@@ -50,11 +50,13 @@ class TaskOrchestrator:
             task_id=task_id,
             description=request.query,
             complexity_estimated="medium",
-            status="running"
+            status="running",
         )
 
         self.blackboard.add_entry("task", task.model_dump())
-        obs_logger.log_event("task_started", session_id, {"task_id": task_id, "privacy": privacy_tier})
+        obs_logger.log_event(
+            "task_started", session_id, {"task_id": task_id, "privacy": privacy_tier}
+        )
 
         budget = BudgetState(remaining_usd=1.00, spent_usd=0.0, token_limit=100000)
 
@@ -69,7 +71,7 @@ class TaskOrchestrator:
             budget=budget,
             memory_brief=memory_brief,
             disagreement_risk="low",
-            needs_tools=False
+            needs_tools=False,
         )
         self.blackboard.add_entry("route_decision", route_decision.model_dump())
 
@@ -77,12 +79,16 @@ class TaskOrchestrator:
         outputs = []
         try:
             if route_decision.workers_allowed:
-                worker_out = await self.worker_provider.execute(task, self.blackboard.get_all_entries())
+                worker_out = await self.worker_provider.execute(
+                    task, self.blackboard.get_all_entries()
+                )
                 self.blackboard.add_entry("agent_output", worker_out)
                 outputs.append(worker_out)
 
                 if route_decision.middle_allowed:
-                    middle_out = await self.middle_provider.execute(task, self.blackboard.get_all_entries())
+                    middle_out = await self.middle_provider.execute(
+                        task, self.blackboard.get_all_entries()
+                    )
                     self.blackboard.add_entry("agent_output", middle_out)
                     outputs.append(middle_out)
 
@@ -110,11 +116,14 @@ class TaskOrchestrator:
                 head_direct=route_decision.head_direct,
                 used_middle_tier=route_decision.middle_allowed,
                 used_worker_swarm=route_decision.workers_allowed,
-                spawn_count=len(outputs)
+                spawn_count=len(outputs),
             ),
-            models=EpisodeModels(head="configurable_head", workers=["configurable_worker"] if route_decision.workers_allowed else []),
+            models=EpisodeModels(
+                head="configurable_head",
+                workers=["configurable_worker"] if route_decision.workers_allowed else [],
+            ),
             metrics=EpisodeMetrics(latency_ms=elapsed_ms, estimated_cost_usd=0.01),
-            quality=EpisodeQuality(score=0.9 if success else 0.0, accepted=success, confidence=0.8)
+            quality=EpisodeQuality(score=0.9 if success else 0.0, accepted=success, confidence=0.8),
         )
         self.memory.store_episode(episode)
 
@@ -123,5 +132,5 @@ class TaskOrchestrator:
             "task_id": task.task_id,
             "route_strategy": route_decision.strategy,
             "outputs": outputs,
-            "memory_brief": memory_brief.to_formatted_string()
+            "memory_brief": memory_brief.to_formatted_string(),
         }

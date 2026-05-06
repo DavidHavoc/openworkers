@@ -71,20 +71,22 @@ class Router:
     def __init__(self):
         pass
 
-    def route_task(self,
-                   task: Task,
-                   privacy_tier: str,
-                   budget: BudgetState,
-                   memory_brief: MemoryBrief,
-                   disagreement_risk: str = "low",
-                   needs_tools: bool = False) -> RouteDecision:
+    def route_task(
+        self,
+        task: Task,
+        privacy_tier: str,
+        budget: BudgetState,
+        memory_brief: MemoryBrief,
+        disagreement_risk: str = "low",
+        needs_tools: bool = False,
+    ) -> RouteDecision:
         if privacy_tier == "trusted":
             return RouteDecision(
                 strategy="head_direct",
                 head_direct=True,
                 workers_allowed=False,
                 middle_allowed=False,
-                rationale="Privacy constraint: 'trusted' requires direct HEAD resolution without exposure to workers."
+                rationale="Privacy constraint: 'trusted' requires direct HEAD resolution without exposure to workers.",
             )
 
         if budget.remaining_usd < 0.05:
@@ -93,7 +95,7 @@ class Router:
                 head_direct=True,
                 workers_allowed=False,
                 middle_allowed=False,
-                rationale="Low budget requires cheapest resolution path."
+                rationale="Low budget requires cheapest resolution path.",
             )
 
         if task.complexity_estimated == "high" or disagreement_risk == "high":
@@ -102,7 +104,7 @@ class Router:
                 head_direct=False,
                 workers_allowed=True,
                 middle_allowed=True,
-                rationale="High complexity or disagreement requires full swarm with middle-tier synthesis."
+                rationale="High complexity or disagreement requires full swarm with middle-tier synthesis.",
             )
 
         if needs_tools or task.complexity_estimated == "medium":
@@ -111,17 +113,21 @@ class Router:
                 head_direct=False,
                 workers_allowed=True,
                 middle_allowed=False,
-                rationale="Medium complexity or tool needs require worker swarm but no middle-tier synthesis."
+                rationale="Medium complexity or tool needs require worker swarm but no middle-tier synthesis.",
             )
 
         memory_bias = memory_brief.recommended_routing_bias
-        rationale = f"Routing defaulted to head_direct. Memory guidance: {memory_bias}" if memory_bias else "Default simple routing."
+        rationale = (
+            f"Routing defaulted to head_direct. Memory guidance: {memory_bias}"
+            if memory_bias
+            else "Default simple routing."
+        )
         return RouteDecision(
             strategy="head_direct",
             head_direct=True,
             workers_allowed=False,
             middle_allowed=False,
-            rationale=rationale
+            rationale=rationale,
         )
 
     def route_thesis_task(

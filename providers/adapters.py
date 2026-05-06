@@ -21,6 +21,7 @@ _PROVIDER_API_KEY_ENV = {
 
 class LLMAdapter:
     """Single-provider backend adapter. Called by UnifiedLLM, not by agents directly."""
+
     def __init__(self, provider: str, default_model: str = None):
         self.provider = provider
         self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
@@ -61,11 +62,17 @@ class LLMAdapter:
             raise ValueError(f"No API key configured for provider '{self.provider}'")
         try:
             if self.provider == "anthropic":
-                return await self._generate_anthropic(model_name, prompt, system_prompt, response_schema)
+                return await self._generate_anthropic(
+                    model_name, prompt, system_prompt, response_schema
+                )
             elif self.provider == "openai":
-                return await self._generate_openai(model_name, prompt, system_prompt, response_schema, strict_schema=True)
+                return await self._generate_openai(
+                    model_name, prompt, system_prompt, response_schema, strict_schema=True
+                )
             elif self.provider == "deepseek":
-                return await self._generate_openai(model_name, prompt, system_prompt, response_schema, strict_schema=False)
+                return await self._generate_openai(
+                    model_name, prompt, system_prompt, response_schema, strict_schema=False
+                )
             else:
                 raise NotImplementedError(f"Provider {self.provider} not implemented")
         except asyncio.TimeoutError:
@@ -197,11 +204,19 @@ def _create_unified_llm() -> UnifiedLLM:
     for prov in available:
         adapters[prov] = LLMAdapter(provider=prov)
 
-    async def _generate_fn(provider: str, model: str, prompt: str, system_prompt: str, response_schema: Optional[Dict[str, Any]] = None) -> str:
+    async def _generate_fn(
+        provider: str,
+        model: str,
+        prompt: str,
+        system_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+    ) -> str:
         adapter = adapters.get(provider)
         if adapter is None:
             return f"[UNKNOWN_PROVIDER] {provider}"
-        return await adapter.generate(prompt, system_prompt, model=model, response_schema=response_schema)
+        return await adapter.generate(
+            prompt, system_prompt, model=model, response_schema=response_schema
+        )
 
     unified.set_generate_fn(_generate_fn)
     return unified

@@ -13,14 +13,28 @@ class Blackboard:
     Structured short-term shared state system for the orchestrator and agents.
     Uses Redis to persist data during the execution loop.
     """
+
     def __init__(self, session_id: Optional[str] = None):
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         self.redis = redis.from_url(redis_url, decode_responses=True)
         self.session_id = session_id or str(uuid.uuid4())
         self.prefix = f"blackboard:{self.session_id}:"
 
-    def add_entry(self, entry_type: str, content: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> BlackboardEntry:
-        allowed_types = {"task", "evidence_ref", "route_decision", "agent_output", "status", "lit_search", "lit_map", "critique", "citation_audit", "corpus_benchmarks"}
+    def add_entry(
+        self, entry_type: str, content: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None
+    ) -> BlackboardEntry:
+        allowed_types = {
+            "task",
+            "evidence_ref",
+            "route_decision",
+            "agent_output",
+            "status",
+            "lit_search",
+            "lit_map",
+            "critique",
+            "citation_audit",
+            "corpus_benchmarks",
+        }
         if entry_type not in allowed_types:
             raise ValueError(f"Invalid entry_type '{entry_type}'. Must be one of {allowed_types}")
 
@@ -29,7 +43,7 @@ class Blackboard:
             entry_type=entry_type,
             content=content,
             metadata=metadata or {},
-            timestamp=datetime.utcnow().isoformat() + "Z"
+            timestamp=datetime.utcnow().isoformat() + "Z",
         )
 
         # Store in Redis as JSON string under session-specific key

@@ -62,7 +62,11 @@ def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
 
             title = title_el.text.strip() if title_el is not None and title_el.text else "Unknown"
             abstract = summary_el.text.strip() if summary_el is not None and summary_el.text else ""
-            arxiv_id = id_el.text.strip().split("/abs/")[-1] if id_el is not None and id_el.text else "unknown"
+            arxiv_id = (
+                id_el.text.strip().split("/abs/")[-1]
+                if id_el is not None and id_el.text
+                else "unknown"
+            )
             year = 0
             if published_el is not None and published_el.text:
                 try:
@@ -76,13 +80,15 @@ def _search_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
                 if name_el is not None and name_el.text:
                     authors.append(name_el.text.strip())
 
-            papers.append({
-                "arxiv_id": arxiv_id,
-                "title": title,
-                "abstract": abstract,
-                "year": year,
-                "authors": authors,
-            })
+            papers.append(
+                {
+                    "arxiv_id": arxiv_id,
+                    "title": title,
+                    "abstract": abstract,
+                    "year": year,
+                    "authors": authors,
+                }
+            )
         return papers
     except Exception as e:
         print(f"    Search error: {e}")
@@ -97,6 +103,7 @@ def _download_pdf_text(arxiv_id: str) -> str:
         resp.raise_for_status()
         pdf_bytes = resp.content
         import fitz
+
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         text = ""
         for page in doc:

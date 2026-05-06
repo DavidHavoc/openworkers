@@ -6,10 +6,12 @@ app = FastAPI(
     version="0.1.0",
 )
 
+
 @app.get("/health")
 async def health_check():
     """Basic health check endpoint."""
     return {"status": "ok", "tier": "api-gateway"}
+
 
 @app.post("/tasks/")
 async def submit_task(query: str):

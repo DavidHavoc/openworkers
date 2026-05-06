@@ -180,10 +180,16 @@ class UnifiedLLM:
                 logger.info(f"ROUTE: skipping {provider} (budget exhausted)")
                 continue
 
-            model = preferred_model if provider == preferred_provider else self._default_model_for(provider)
+            model = (
+                preferred_model
+                if provider == preferred_provider
+                else self._default_model_for(provider)
+            )
 
             try:
-                result = await self._call_provider(provider, model, prompt, system_prompt, response_schema)
+                result = await self._call_provider(
+                    provider, model, prompt, system_prompt, response_schema
+                )
                 elapsed = (time.monotonic() - t0) * 1000
                 cost = self._estimate_cost(result, provider)
 
@@ -219,7 +225,9 @@ class UnifiedLLM:
             except Exception as e:
                 last_error = e
                 self.health_cache.mark_unhealthy(provider)
-                logger.warning(f"ROUTE: {provider}/{model} failed for mode={mode}: {e}. Falling back.")
+                logger.warning(
+                    f"ROUTE: {provider}/{model} failed for mode={mode}: {e}. Falling back."
+                )
 
         elapsed = (time.monotonic() - t0) * 1000
         logger.error(f"ROUTE: all providers failed for mode={mode}: {last_error}")
@@ -249,7 +257,14 @@ class UnifiedLLM:
                 order.append(p)
         return order
 
-    async def _call_provider(self, provider: str, model: str, prompt: str, system_prompt: str, response_schema: Optional[Dict[str, Any]] = None) -> str:
+    async def _call_provider(
+        self,
+        provider: str,
+        model: str,
+        prompt: str,
+        system_prompt: str,
+        response_schema: Optional[Dict[str, Any]] = None,
+    ) -> str:
         if self._generate_fn:
             return await self._generate_fn(provider, model, prompt, system_prompt, response_schema)
         return f"[NO_PROVIDER] {provider}/{model} unavailable"

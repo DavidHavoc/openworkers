@@ -14,7 +14,11 @@ from tools.mcp.engine import ToolRegistry
 @pytest.fixture(autouse=True)
 def mock_redis(monkeypatch):
     server = fakeredis.FakeServer()
-    monkeypatch.setattr("redis.from_url", lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True))
+    monkeypatch.setattr(
+        "redis.from_url",
+        lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True),
+    )
+
 
 @pytest.mark.asyncio
 async def test_mcp_permissions():
@@ -33,6 +37,7 @@ async def test_mcp_permissions():
     res2 = await kb.execute({"doc_id": "123"}, "public")
     assert "error" in res2
     assert "Security Violation" in res2["error"]
+
 
 @pytest.mark.asyncio
 async def test_adapters_dry_run(monkeypatch):
@@ -140,6 +145,7 @@ async def test_request_with_retry_on_5xx(monkeypatch):
 
     async def _fake_sleep(_delay):
         pass
+
     monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
 
     call_count = [0]
@@ -170,6 +176,7 @@ async def test_request_with_retry_timeout_retries(monkeypatch):
 
     async def _fake_sleep(_delay):
         pass
+
     monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
 
     call_count = [0]
@@ -198,6 +205,7 @@ async def test_request_with_retry_max_retries_exceeded(monkeypatch):
 
     async def _fake_sleep(_delay):
         pass
+
     monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
 
     async def _mock_request(client, method, url, headers=None):

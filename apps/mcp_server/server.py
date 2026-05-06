@@ -20,9 +20,21 @@ TOOL_DEFINITIONS = [
             "properties": {
                 "question": {"type": "string", "description": "Research question"},
                 "summary": {"type": "string", "description": "Topic summary (optional)"},
-                "discipline": {"type": "string", "description": "Academic discipline", "default": "general"},
-                "knowledge": {"type": "string", "description": "What you already know (optional)", "default": ""},
-                "need": {"type": "string", "description": "What you need help with (optional)", "default": ""},
+                "discipline": {
+                    "type": "string",
+                    "description": "Academic discipline",
+                    "default": "general",
+                },
+                "knowledge": {
+                    "type": "string",
+                    "description": "What you already know (optional)",
+                    "default": "",
+                },
+                "need": {
+                    "type": "string",
+                    "description": "What you need help with (optional)",
+                    "default": "",
+                },
             },
             "required": ["question"],
         },
@@ -34,7 +46,11 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "Text to critique"},
-                "discipline": {"type": "string", "description": "Academic discipline", "default": "general"},
+                "discipline": {
+                    "type": "string",
+                    "description": "Academic discipline",
+                    "default": "general",
+                },
             },
             "required": ["text"],
         },
@@ -57,7 +73,12 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search query"},
-                "source": {"type": "string", "description": "arxiv or semantic_scholar", "enum": ["arxiv", "semantic_scholar"], "default": "semantic_scholar"},
+                "source": {
+                    "type": "string",
+                    "description": "arxiv or semantic_scholar",
+                    "enum": ["arxiv", "semantic_scholar"],
+                    "default": "semantic_scholar",
+                },
                 "limit": {"type": "integer", "description": "Max papers to return", "default": 10},
             },
             "required": ["query"],
@@ -119,14 +140,14 @@ class ThesisMCPServer:
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "result": {
-                    "content": [
-                        {"type": "text", "text": result}
-                    ]
-                },
+                "result": {"content": [{"type": "text", "text": result}]},
             }
 
-        return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": f"Method not found: {method}"}}
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {"code": -32601, "message": f"Method not found: {method}"},
+        }
 
     async def _call_tool(self, name: str, args: Dict[str, Any]) -> str:
         orch = self._get_orchestrator()
@@ -199,14 +220,18 @@ class ThesisMCPServer:
                     self._send(response)
 
             except json.JSONDecodeError:
-                self._send({
-                    "jsonrpc": "2.0",
-                    "id": None,
-                    "error": {"code": -32700, "message": "Parse error"},
-                })
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32700, "message": "Parse error"},
+                    }
+                )
             except Exception as e:
-                self._send({
-                    "jsonrpc": "2.0",
-                    "id": None,
-                    "error": {"code": -32603, "message": str(e)},
-                })
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32603, "message": str(e)},
+                    }
+                )
