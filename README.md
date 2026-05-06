@@ -280,6 +280,10 @@ pytest tests/ -v
 See [docs/architecture.md](docs/architecture.md) for the tier breakdown.
 See [docs/examples.md](docs/examples.md) for output format samples.
 
+## Contributing
+
+We welcome contributions from the community — bug fixes, documentation improvements, new features, or provider integrations. Before submitting a PR, run the test suite and eval harness to make sure nothing breaks. See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture overview, code conventions, and the PR checklist.
+
 ## License
 
 MIT — DavidHavoc, 2026
