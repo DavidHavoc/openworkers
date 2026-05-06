@@ -175,21 +175,80 @@ Then use natively in conversation: *"Find papers on sparse attention and critiqu
 
 ## local development
 
-### Setup
+### Prerequisites
+
+- Python 3.9+
+- Redis (for blackboard shared state)
+- Qdrant runs embedded via `./qdrant_data` — no separate server needed
+
+### Install
 
 ```bash
+git clone https://github.com/DavidHavoc/openworkers.git
+cd openworkers
 python3 -m venv .venv
 source .venv/bin/activate
-make install
+pip install -e .[dev]
 ```
 
-Copy `.env.example` to `.env`. Set `DRY_RUN=true` to run without API keys.
+### Configure `.env`
+
+Copy the example and open it:
+
+```bash
+cp .env.example .env
+```
+
+**Required** — pick ONE provider section, uncomment it, fill in real values:
+
+```env
+# API keys (set the one matching your chosen provider)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Per-mode routing (uncomment one block)
+DRY_RUN=false
+
+# Single Anthropic (set real model names)
+THESIS_QUALITY_PROVIDER=anthropic
+THESIS_QUALITY_MODEL=claude-sonnet-4-20250514
+THESIS_BALANCED_PROVIDER=anthropic
+THESIS_BALANCED_MODEL=claude-haiku-4-5-20250514
+THESIS_CHEAP_PROVIDER=anthropic
+THESIS_CHEAP_MODEL=claude-haiku-4-5-20250514
+```
+
+The three modes control which model each agent uses:
+
+| Mode | Agent | Typical model |
+|---|---|---|
+| `quality` | HEAD planner, HEAD supervisor, critic | stronger model |
+| `balanced` | checker, synthesizer | mid model |
+| `cheap` | researcher | cheaper/faster model |
+
+Same provider with different models is fine (Anthropic Sonnet for quality, Haiku for balanced/cheap). Mixed providers also work.
+
+**Dry run** — set `DRY_RUN=true` to skip API calls and test the pipeline locally with placeholder output. No API keys needed. The routing layer logs what it *would* have called.
 
 ### Run
 
 ```bash
-# CLI
-python -m apps.cli.main research "your question" --format text
+# Full research session
+python -m apps.cli.main research "your question" --discipline computer_science
+
+# Output as JSON
+python -m apps.cli.main research "your question" --format json
+
+# Save to file
+python -m apps.cli.main research "your question" --output session.json
+
+# Critique only
+python -m apps.cli.main critique "Social media causes depression"
+
+# Verify a citation
+python -m apps.cli.main verify "10.1038/nature14539"
+
+# Quick paper search (no LLM, pure API)
+python -m apps.cli.main papers "transformer attention mechanisms" --source arxiv --limit 5
 
 # Eval harness
 python core/evals/thesis_harness.py
@@ -218,17 +277,9 @@ pytest tests/ -v
 | 10 | MCP server (OpenCode + Claude Code) |
 | 11 | Thesis corpus learning |
 
-### Phase 1 fixes (May 2026)
-- **Router** — provider_map now uses default fallback values (quality→anthropic, balanced→openai, cheap→deepseek) so routing works without env vars. Added `provider_fallback` chain per mode.
-- **Blackboard** — fixed infinite recursion in `_get_entries()` that silently returned empty lists, breaking inter-agent context sharing.
-- **JSON parsing** — replaced fragile multi-fallback `_parse_json_response` with Pydantic `model_validate_json()` as primary path, preserving regex fallback.
-- **HTTP** — migrated MCP tools and seed script from synchronous `urllib.request` to `httpx` (async in tools, sync in scripts). Promoted `httpx` to core dependency.
-
-## Architecture
-
 See [docs/architecture.md](docs/architecture.md) for the tier breakdown.
 See [docs/examples.md](docs/examples.md) for output format samples.
 
 ## License
 
-MIT - DavidHavoc, 2026
+MIT — DavidHavoc, 2026
