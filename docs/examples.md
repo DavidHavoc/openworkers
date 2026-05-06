@@ -224,3 +224,38 @@ SCORECARD: 7/7 passed
 ============================================================
 OVERALL: PASS
 ```
+
+## Using in OpenCode / Claude Code
+
+Once the MCP server is configured, the four tools (`thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`) appear alongside built-in tools. You can use them conversationally without leaving the editor.
+
+### Research a topic
+
+> Check papers on optical computing and whether it can replace transistors
+
+The assistant searches arXiv and Semantic Scholar, audits citations, extracts methods, and produces a structured critique. All papers have verified IDs.
+
+### Critique an idea
+
+> Critique my research question: "Does remote work affect team productivity in software startups?"
+
+Returns strengths, weaknesses, gaps, specific counterarguments from literature, and suggestions for narrowing.
+
+### Verify a specific citation
+
+> Is the paper "Deep learning" by LeCun et al (2015) real? DOI is 10.1038/nature14539
+
+Returns confirmed metadata, authors, year, publisher — or reports that the DOI doesn't exist.
+
+### Quick paper discovery (no LLM)
+
+> Find recent arXiv papers on sparse attention mechanisms, just titles and IDs
+
+Returns raw paper list from arXiv with verified arXiv IDs. No LLM token cost for this.
+
+### Multiple tools in conversation
+
+> I'm writing a thesis on photonic computing for AI accelerators. Find relevant papers, then check if this claim holds: "Photonics offers 10x energy efficiency over electronics for matrix multiplication." Finally critique my methodology section below...
+
+The assistant runs a multi-step session: lit search first, then citation verification against found papers, then structured critique of the draft section — all in one conversation.
+
