@@ -178,51 +178,6 @@ pytest tests/ -v
 python -m core.evals.thesis_harness
 ```
 
-### Configure `.env`
-
-Copy the example and open it:
-
-```bash
-cp .env.example .env
-```
-
-**Required**  -  pick ONE provider section, uncomment it, fill in real values:
-
-```env
-# API keys (set the one matching your chosen provider)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Per-mode routing (uncomment one block)
-DRY_RUN=false
-
-# Single Anthropic (set real model names)
-THESIS_QUALITY_PROVIDER=anthropic
-THESIS_QUALITY_MODEL=claude-opus
-THESIS_BALANCED_PROVIDER=anthropic
-THESIS_BALANCED_MODEL=claude-sonnet
-THESIS_CHEAP_PROVIDER=anthropic / deepseek
-THESIS_CHEAP_MODEL=claude-haiku/ deepseek
-```
-
-The three modes control which model each agent uses:
-
-| Mode | Agents |
-|---|---|
-| `quality` | HEAD planner, HEAD supervisor, critic |
-| `balanced` | checker, synthesizer |
-| `cheap` | researcher |
-
-Same provider with different models per mode is fine (Claude Sonnet for quality, Claude Haiku for balanced and cheap). Mixed providers also work.
-
-**Dry run**  -  set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
-
-### Tests
-
-```bash
-pytest tests/ -v
-python -m core.evals.thesis_harness
-```
-
 See [docs/examples.md](docs/examples.md) for detailed output samples.
 
 ## Contributing
