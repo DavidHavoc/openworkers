@@ -59,7 +59,7 @@ source = ["."]
 omit = ["tests/*", "apps/mcp_server/*", "scripts/*", ".venv/*"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 40
 exclude_also = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",

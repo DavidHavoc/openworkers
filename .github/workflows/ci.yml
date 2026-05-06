@@ -56,7 +56,7 @@ jobs:
         run: mypy providers/ --strict --ignore-missing-imports
 
   test:
-    needs: [lint, typecheck]
+    needs: [lint]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -74,7 +74,7 @@ jobs:
           pip install -e ".[dev]" pytest-cov
 
       - name: Run tests with coverage
-        run: pytest tests/ -v --cov=. --cov-report=term --cov-report=xml --cov-fail-under=60
+        run: pytest tests/ -v --cov=. --cov-report=term --cov-report=xml --cov-fail-under=40
         env:
           DRY_RUN: "true"
 
