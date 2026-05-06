@@ -75,39 +75,28 @@ See [docs/examples.md](docs/examples.md) for full output samples.
 
 ### MCP Server
 
-The MCP server talks JSON-RPC over stdin/stdout. Configure once, then use the assistant natively from any MCP-compatible client.
+The MCP server talks JSON-RPC over stdin/stdout. Add it to OpenCode's config (global: `~/.config/opencode/opencode.json` or project root: `opencode.json`):
 
-**Start the server:**
-
-```bash
-python -m apps.mcp_server.main
+```json
+{
+  "mcp": {
+    "thesis-assistant": {
+      "type": "local",
+      "command": ["docker", "compose", "run", "--rm", "-i", "mcp"]
+    }
+  }
+}
 ```
 
 Four tools are registered: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`.
 
-**OpenCode**  -  add to your OpenCode config (e.g. `~/.config/opencode/opencode.json` or .jsonc):
-
-```json
-  "mcp": {
-    "thesis-assistant": {
-      "type": "local",
-      "command": [
-        "bash",
-        "-lc",
-        "cd /path/to/openworkers && docker compose run --rm -i mcp"
-      ]
-    }
-  }
-
-```
-
-**Claude Code**  -  register the server:
+For Claude Code:
 
 ```bash
 claude mcp add thesis-assistant -- python -m apps.mcp_server.main
 ```
 
-Make sure your `.env` is configured with API keys before starting the server. Set `DRY_RUN=true` if you just want to test the startup.
+Your `.env` (with API keys and `DRY_RUN=false`) must be present. Redis and Qdrant need to be running — if using Docker, `docker compose up -d redis qdrant` handles that.
 
 ### API Server
 
@@ -135,41 +124,47 @@ pip install -e .[dev]
 
 ### Configure `.env`
 
-Copy the example and open it:
+Copy and edit:
 
 ```bash
 cp .env.example .env
 ```
 
-**Required**  -  pick ONE provider section, uncomment it, fill in real values:
+Set your API key and per-mode provider + model. Example for DeepSeek:
 
 ```env
-# API keys (set the one matching your chosen provider)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Per-mode routing (uncomment one block)
+DEEPSEEK_API_KEY=sk-...
 DRY_RUN=false
-
-# Single Anthropic (set real model names)
-THESIS_QUALITY_PROVIDER=anthropic
-THESIS_QUALITY_MODEL=claude-opus
-THESIS_BALANCED_PROVIDER=anthropic
-THESIS_BALANCED_MODEL=claude-sonnet
-THESIS_CHEAP_PROVIDER=anthropic
-THESIS_CHEAP_MODEL=claude-haiku
+THESIS_QUALITY_PROVIDER=deepseek
+THESIS_QUALITY_MODEL=deepseek-chat
+THESIS_BALANCED_PROVIDER=deepseek
+THESIS_BALANCED_MODEL=deepseek-chat
+THESIS_CHEAP_PROVIDER=deepseek
+THESIS_CHEAP_MODEL=deepseek-chat
 ```
 
-The three modes control which model each agent uses:
+The three modes let different agents use different models:
 
-| Mode | Agent | Typical model |
-|---|---|---|
-| `quality` | HEAD planner, HEAD supervisor, critic | stronger model |
-| `balanced` | checker, synthesizer | mid model |
-| `cheap` | researcher | cheaper/faster model |
+| Mode | Agents |
+|---|---|
+| `quality` | HEAD planner, HEAD supervisor, critic |
+| `balanced` | checker, synthesizer |
+| `cheap` | researcher |
 
-Same provider with different models is fine. Mixed providers also work.
+Same provider with different models per mode works (Claude Sonnet for quality, Haiku for cheap). Mixed providers also fine.
 
-**Dry run**  -  set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
+**Dry run**  -  set `DRY_RUN=true` to skip API calls and test without keys.
+
+### Docker
+
+```bash
+docker compose build
+docker compose up -d redis qdrant           # background services
+docker compose run --rm cli python -m apps.cli.main research "your question"
+docker compose run --rm cli python -m apps.cli.main verify "10.1038/nature14539"
+```
+
+The CLI and MCP services use a `tools` profile  -  they run on demand rather than auto-starting with `up`. Your `.env` is mounted automatically.
 
 ### Tests
 
