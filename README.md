@@ -133,31 +133,40 @@ STUDENT OUTPUT
 
 ## Usage
 
-### CLI (Phase 9)
+### CLI
 
 ```bash
 # Full research session
-thesis research "How do sparse attention mechanisms compare to dense ones?"
+thesis research "your question" --discipline computer_science
 
-# Critique an idea or draft section
-thesis critique "My methodology uses a within-subjects design with 20 participants"
+# Critique an idea
+thesis critique "Social media causes depression"
 
-# Verify a citation
-thesis verify "Smith 2023 found that attention is quadratic in sequence length"
+# Verify a citation (DOI)
+thesis verify "10.1038/nature14539"
 
-# Quick paper search (no LLM, pure API)
-thesis papers "transformer attention mechanisms" --limit 10
-
-# Resume a previous session
-thesis resume SESSION_ID
+# Quick paper search, no LLM
+thesis papers "transformer attention" --source arxiv --limit 5
 
 # Ingest a thesis into the corpus
-thesis corpus ingest "path/to/thesis.pdf" --discipline computer_science --year 2024
+thesis corpus ingest "thesis.pdf" --title "My Thesis" --discipline cs --year 2024
 ```
 
-### MCP Server (Phase 10)
+See [docs/examples.md](docs/examples.md) for full output samples.
 
-Add to OpenCode or Claude Code:
+### MCP Server
+
+The MCP server talks JSON-RPC over stdin/stdout. Configure once, then use the assistant natively from any MCP-compatible client.
+
+**Start the server:**
+
+```bash
+python -m apps.mcp_server.main
+```
+
+Four tools are registered: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`.
+
+**OpenCode** — add to your OpenCode config (e.g. `~/.config/opencode/mcp_servers.json`):
 
 ```json
 {
@@ -165,21 +174,33 @@ Add to OpenCode or Claude Code:
     "thesis-assistant": {
       "command": "python",
       "args": ["-m", "apps.mcp_server.main"],
-      "cwd": "/path/to/openworkers"
+      "cwd": "/absolute/path/to/openworkers"
     }
   }
 }
 ```
 
-Then use natively in conversation: *"Find papers on sparse attention and critique my research question."*
+**Claude Code** — register the server:
 
-## local development
+```bash
+claude mcp add thesis-assistant -- python -m apps.mcp_server.main
+```
 
-### Prerequisites
+Make sure your `.env` is configured with API keys before starting the server. Set `DRY_RUN=true` if you just want to test the startup.
 
-- Python 3.9+
-- Redis (for blackboard shared state)
-- Qdrant runs embedded via `./qdrant_data` — no separate server needed
+### API Server
+
+A FastAPI stub is available at `apps/api/main.py`. It provides a `/health` endpoint and a `/tasks/` stub — not wired to the full pipeline yet. Useful as a foundation or for health-check monitoring:
+
+```bash
+uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+```
+
+Then `curl http://localhost:8000/health` returns `{"status":"ok"}`.
+
+## Setup
+
+**Prerequisites:** Python 3.9+, Redis (for blackboard state). Qdrant runs embedded — no server needed.
 
 ### Install
 
@@ -215,6 +236,53 @@ THESIS_BALANCED_PROVIDER=anthropic
 THESIS_BALANCED_MODEL=claude-haiku-4-5-20250514
 THESIS_CHEAP_PROVIDER=anthropic
 THESIS_CHEAP_MODEL=claude-haiku-4-5-20250514
+```
+
+The three modes control which model each agent uses:
+
+| Mode | Agent | Typical model |
+|---|---|---|
+| `quality` | HEAD planner, HEAD supervisor, critic | stronger model |
+| `balanced` | checker, synthesizer | mid model |
+| `cheap` | researcher | cheaper/faster model |
+
+Same provider with different models is fine. Mixed providers also work.
+
+**Dry run** — set `DRY_RUN=true` to skip API calls and test the pipeline locally. No API keys needed.
+
+### Tests
+
+```bash
+pytest tests/ -v
+
+# Thesis eval harness (7 tests)
+python -m core.evals.thesis_harness
+```
+
+### Configure `.env`
+
+Copy the example and open it:
+
+```bash
+cp .env.example .env
+```
+
+**Required** — pick ONE provider section, uncomment it, fill in real values:
+
+```env
+# API keys (set the one matching your chosen provider)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Per-mode routing (uncomment one block)
+DRY_RUN=false
+
+# Single Anthropic (set real model names)
+THESIS_QUALITY_PROVIDER=anthropic
+THESIS_QUALITY_MODEL=claude-opus
+THESIS_BALANCED_PROVIDER=anthropic
+THESIS_BALANCED_MODEL=claude-sonnet
+THESIS_CHEAP_PROVIDER=anthropic
+THESIS_CHEAP_MODEL=claude-haiku
 ```
 
 The three modes control which model each agent uses:
