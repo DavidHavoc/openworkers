@@ -150,7 +150,7 @@ async def test_request_with_retry_on_5xx(monkeypatch):
 
     call_count = [0]
 
-    async def _mock_request(client, method, url, headers=None):
+    async def _mock_request(client, method, url, headers=None, extensions=None):
         call_count[0] += 1
         if call_count[0] < 2:
             req = httpx.Request(method, url)
@@ -181,7 +181,7 @@ async def test_request_with_retry_timeout_retries(monkeypatch):
 
     call_count = [0]
 
-    async def _mock_request(client, method, url, headers=None):
+    async def _mock_request(client, method, url, headers=None, extensions=None):
         call_count[0] += 1
         if call_count[0] < 3:
             raise httpx.ReadTimeout("read timeout")
@@ -208,7 +208,7 @@ async def test_request_with_retry_max_retries_exceeded(monkeypatch):
 
     monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
 
-    async def _mock_request(client, method, url, headers=None):
+    async def _mock_request(client, method, url, headers=None, extensions=None):
         raise httpx.ConnectTimeout("connect timeout")
 
     monkeypatch.setattr(httpx.AsyncClient, "request", _mock_request)

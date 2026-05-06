@@ -15,8 +15,9 @@ ARXIV_NAMESPACES = {
 }
 
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
-_MAX_RETRIES = 3
+_MAX_RETRIES = 2
 _RETRY_BASE_DELAY = 1.0
+_CONNECT_TIMEOUT = 10.0
 
 _client: httpx.AsyncClient = None
 
@@ -25,7 +26,7 @@ def _get_client() -> httpx.AsyncClient:
     global _client
     if _client is None:
         _client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0),
+            timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=30.0, write=10.0, pool=10.0),
             limits=httpx.Limits(max_keepalive_connections=6, max_connections=20),
             headers={"User-Agent": "OpenWorkers/1.0"},
         )
@@ -38,12 +39,23 @@ async def _request_with_retry(
     *,
     headers: Dict[str, str] = None,
     max_retries: int = _MAX_RETRIES,
+    read_timeout: float = 20.0,
 ) -> httpx.Response:
     client = _get_client()
+    total_deadline = asyncio.get_event_loop().time() + (read_timeout + _CONNECT_TIMEOUT + 5) * (
+        max_retries + 1
+    )
     last_exc: Exception = None
     for attempt in range(max_retries + 1):
+        if asyncio.get_event_loop().time() > total_deadline:
+            raise httpx.ReadTimeout("Total retry deadline exceeded")
         try:
-            resp = await client.request(method, url, headers=headers)
+            resp = await client.request(
+                method,
+                url,
+                headers=headers,
+                extensions={"timeout": {"read": read_timeout}},
+            )
             if resp.status_code in _RETRYABLE_STATUSES and attempt < max_retries:
                 raise httpx.HTTPStatusError(
                     f"Retryable status {resp.status_code}",
@@ -117,7 +129,7 @@ class ArxivSearchTool(MCPTool):
         )
 
         try:
-            resp = await _request_with_retry("GET", url)
+            resp = await _request_with_retry("GET", url, read_timeout=float(self.timeout))
             raw = resp.text
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response.text else ""
@@ -264,7 +276,7 @@ class SemanticScholarSearchTool(MCPTool):
         )
 
         try:
-            resp = await _request_with_retry("GET", url)
+            resp = await _request_with_retry("GET", url, read_timeout=float(self.timeout))
             data = resp.json()
         except httpx.HTTPStatusError as e:
             body = e.response.text[:300] if e.response.text else ""
@@ -347,7 +359,7 @@ class CrossRefVerificationTool(MCPTool):
         url = f"https://api.crossref.org/works/{urllib.parse.quote(doi, safe='')}"
 
         try:
-            resp = await _request_with_retry("GET", url)
+            resp = await _request_with_retry("GET", url, read_timeout=float(self.timeout))
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 return {"exists": False, "doi": doi}
