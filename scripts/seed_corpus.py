@@ -6,12 +6,9 @@ Run: python -m scripts.seed_corpus
 """
 
 import os
-import json
 import urllib.parse
-import time
-import tempfile
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 import httpx
 

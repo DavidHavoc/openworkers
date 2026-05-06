@@ -1,12 +1,15 @@
-import pytest
-import json
 import asyncio
-import httpx
-from tools.mcp.engine import ToolRegistry, WebSearchTool
-from providers.adapters import LLMAdapter, _generate_placeholder_json
-from core.evals.harness import EvaluationHarness
-from core.schemas import ResearchPlan, LitMap, CitationAudit, SynthesisReport, CritiqueResult
+import json
+
 import fakeredis
+import httpx
+import pytest
+
+from core.evals.harness import EvaluationHarness
+from core.schemas import CitationAudit, CritiqueResult, LitMap, ResearchPlan, SynthesisReport
+from providers.adapters import LLMAdapter, _generate_placeholder_json
+from tools.mcp.engine import ToolRegistry
+
 
 @pytest.fixture(autouse=True)
 def mock_redis(monkeypatch):
@@ -18,14 +21,14 @@ async def test_mcp_permissions():
     registry = ToolRegistry()
     search = registry.get_tool("web_search")
     kb = registry.get_tool("knowledge_retrieval")
-    
+
     # Trusted tier should access both
     assert "trusted" in search.allowed_tiers
     assert "trusted" in kb.allowed_tiers
-    
+
     res1 = await kb.execute({"doc_id": "123"}, "trusted")
     assert "content" in res1
-    
+
     # Public tier should hit security violation on KB
     res2 = await kb.execute({"doc_id": "123"}, "public")
     assert "error" in res2
@@ -131,8 +134,9 @@ async def test_request_with_retry_success_first_attempt(monkeypatch):
 @pytest.mark.asyncio
 async def test_request_with_retry_on_5xx(monkeypatch):
     """_request_with_retry retries on 503 and succeeds on the next attempt."""
-    from tools.mcp import academic
     import httpx
+
+    from tools.mcp import academic
 
     async def _fake_sleep(_delay):
         pass
@@ -160,8 +164,9 @@ async def test_request_with_retry_on_5xx(monkeypatch):
 @pytest.mark.asyncio
 async def test_request_with_retry_timeout_retries(monkeypatch):
     """_request_with_retry retries on RequestError (timeout) and succeeds."""
-    from tools.mcp import academic
     import httpx
+
+    from tools.mcp import academic
 
     async def _fake_sleep(_delay):
         pass
@@ -187,8 +192,9 @@ async def test_request_with_retry_timeout_retries(monkeypatch):
 @pytest.mark.asyncio
 async def test_request_with_retry_max_retries_exceeded(monkeypatch):
     """_request_with_retry raises after exhausting all retries."""
-    from tools.mcp import academic
     import httpx
+
+    from tools.mcp import academic
 
     async def _fake_sleep(_delay):
         pass
@@ -206,8 +212,8 @@ async def test_request_with_retry_max_retries_exceeded(monkeypatch):
 
 def test_http_client_uses_connection_pooling():
     """_get_client returns the same AsyncClient instance (connection pooling)."""
-    from tools.mcp.academic import _get_client, _client as mod_client
     import tools.mcp.academic as academic
+    from tools.mcp.academic import _get_client
 
     academic._client = None
     c1 = _get_client()
@@ -218,8 +224,8 @@ def test_http_client_uses_connection_pooling():
 
 def test_timeout_configuration():
     """The shared httpx client has connect=10s, read=30s configured."""
-    from tools.mcp.academic import _get_client, _client as mod_client
     import tools.mcp.academic as academic
+    from tools.mcp.academic import _get_client
 
     academic._client = None
     client = _get_client()
@@ -231,7 +237,11 @@ def test_timeout_configuration():
 
 def test_output_schemas_preserved():
     """Academic tool output schemas remain unchanged after migration."""
-    from tools.mcp.academic import ArxivSearchTool, SemanticScholarSearchTool, CrossRefVerificationTool
+    from tools.mcp.academic import (
+        ArxivSearchTool,
+        CrossRefVerificationTool,
+        SemanticScholarSearchTool,
+    )
 
     arxiv = ArxivSearchTool()
     schema = arxiv.get_output_schema()
@@ -253,13 +263,13 @@ def test_output_schemas_preserved():
 async def test_eval_harness():
     harness = EvaluationHarness()
     results = await harness.run_eval_suite()
-    
+
     assert len(results) == 3
-    
+
     # Confirm Trusted tier forced Head Direct
     trusted_run = next(r for r in results if r["privacy"] == "trusted")
     assert trusted_run["executed_route"] == "head_direct"
-    
+
     # Confirm simple query generated multiple outputs (Head + Worker in default map)
     # Actually 'public' tier with 'low' complexity maps to 'head_workers' assuming generic mapping
     public_run = next(r for r in results if r["privacy"] == "public")

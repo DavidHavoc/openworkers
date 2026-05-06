@@ -1,6 +1,6 @@
-import os
 import json
-from typing import Dict, Any, List, Optional
+import os
+from typing import Any, Dict, List
 
 from core.schemas import BlackboardEntry
 
@@ -27,7 +27,7 @@ class PromptCompiler:
                 raise ValueError(f"Unknown template: {name}")
             path = os.path.join(PROMPT_DIR, filename)
             if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     self._template_cache[name] = f.read()
             else:
                 self._template_cache[name] = f"[Template {name} not found at {path}]"

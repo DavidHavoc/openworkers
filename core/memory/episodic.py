@@ -1,9 +1,10 @@
 import os
-import json
-from typing import List, Optional, Dict, Any
-from core.schemas import MemoryEpisode, MemoryBrief
+from typing import Optional
+
 from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct, VectorParams, Distance
+
+from core.schemas import MemoryBrief, MemoryEpisode
+
 
 class EpisodicMemory:
     """
@@ -18,12 +19,12 @@ class EpisodicMemory:
             self.client = QdrantClient(location=qdrant_location)
         else:
             self.client = QdrantClient(path="./qdrant_data")
-            
+
         self.collection_name = "episodes"
-        
+
         # fastembed model
         self.client.set_model("BAAI/bge-small-en-v1.5")
-        
+
         if not self.client.collection_exists(collection_name=self.collection_name):
             self.client.create_collection(
                 collection_name=self.collection_name,
@@ -49,7 +50,7 @@ class EpisodicMemory:
             query_text=task,
             limit=5
         )
-        
+
         # In Qdrant, results are returned as QueryResponse objects
         relevant_episodes = []
         for result in search_results:
@@ -59,20 +60,20 @@ class EpisodicMemory:
                 meta = result.metadata
                 meta["task_summary"] = result.document
                 relevant_episodes.append(MemoryEpisode.model_validate(meta))
-        
+
         brief = MemoryBrief(
             similar_past_tasks_count=len(relevant_episodes)
         )
-        
+
         if len(relevant_episodes) == 0:
             return brief
-            
+
         # Synthesize takeaways based on history
         successful = [e for e in relevant_episodes if e.quality.accepted]
         failures = [e for e in relevant_episodes if not e.quality.accepted]
-        
+
         brief.confidence = "medium" if len(relevant_episodes) > 3 else "low"
-        
+
         if successful:
             # Dynamically assess the most common successful route
             route_counts = {}
@@ -80,22 +81,22 @@ class EpisodicMemory:
                 route_str = str(e.route.model_dump())
                 route_counts[route_str] = route_counts.get(route_str, 0) + 1
             most_common = max(route_counts, key=route_counts.get)
-            
+
             brief.strongest_successful_pattern = f"Route {most_common} was the most consistently successful pattern."
-            
+
             cheapest = sorted(successful, key=lambda x: x.metrics.estimated_cost_usd)[0]
             brief.cheapest_acceptable_pattern = f"Route {cheapest.route.model_dump()} was the cheapest successful path at ${cheapest.metrics.estimated_cost_usd:.4f}."
-            
+
             fastest = sorted(successful, key=lambda x: x.metrics.latency_ms)[0]
             brief.fastest_acceptable_pattern = f"Route {fastest.route.model_dump()} yielded fastest latency ({fastest.metrics.latency_ms}ms)."
-            
+
             if cheapest.route == fastest.route:
                 brief.recommended_routing_bias = f"Lean towards route: {cheapest.route.model_dump()} as it optimizes both cost and speed."
             else:
                 brief.recommended_routing_bias = f"Weigh tradeoffs between cheapest ({cheapest.route.model_dump()}) and fastest ({fastest.route.model_dump()})."
         else:
             brief.recommended_routing_bias = "Try worker swarm to gather more information."
-            
+
         if failures:
             brief.common_failure_mode = failures[-1].failures[0] if failures[-1].failures else "Model drifted off-topic."
 

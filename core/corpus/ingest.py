@@ -1,7 +1,7 @@
 import os
 import re
 import uuid
-from typing import List, Optional
+from typing import List
 
 from qdrant_client import QdrantClient
 
@@ -101,7 +101,7 @@ def _extract_text_from_pdf(filepath: str) -> str:
         doc.close()
         return text
     except ImportError:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with open(filepath, encoding="utf-8", errors="replace") as f:
             return f.read()
 
 

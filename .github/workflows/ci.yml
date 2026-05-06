@@ -26,7 +26,7 @@ jobs:
           pip install ruff black flake8
 
       - name: Run ruff
-        run: ruff check --output-format=github .
+        run: ruff check --output-format=github --select=E,W,F,I --ignore=E501 .
 
       - name: Run black (check mode)
         run: black --check --diff .

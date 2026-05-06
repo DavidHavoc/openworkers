@@ -1,10 +1,12 @@
-import json
-import uuid
 import os
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 import redis
+
 from core.schemas import BlackboardEntry
+
 
 class Blackboard:
     """
@@ -16,12 +18,12 @@ class Blackboard:
         self.redis = redis.from_url(redis_url, decode_responses=True)
         self.session_id = session_id or str(uuid.uuid4())
         self.prefix = f"blackboard:{self.session_id}:"
-        
+
     def add_entry(self, entry_type: str, content: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> BlackboardEntry:
         allowed_types = {"task", "evidence_ref", "route_decision", "agent_output", "status", "lit_search", "lit_map", "critique", "citation_audit", "corpus_benchmarks"}
         if entry_type not in allowed_types:
             raise ValueError(f"Invalid entry_type '{entry_type}'. Must be one of {allowed_types}")
-            
+
         entry = BlackboardEntry(
             entry_id=str(uuid.uuid4()),
             entry_type=entry_type,
@@ -29,12 +31,12 @@ class Blackboard:
             metadata=metadata or {},
             timestamp=datetime.utcnow().isoformat() + "Z"
         )
-        
+
         # Store in Redis as JSON string under session-specific key
         key = f"{self.prefix}{entry.entry_id}"
         self.redis.set(key, entry.model_dump_json())
         return entry
-        
+
     def get_entries_by_type(self, entry_type: str) -> List[BlackboardEntry]:
         keys = self.redis.keys(f"{self.prefix}*")
         entries = []
@@ -45,7 +47,7 @@ class Blackboard:
                 if entry.entry_type == entry_type:
                     entries.append(entry)
         return sorted(entries, key=lambda x: x.timestamp)
-        
+
     def get_all_entries(self) -> List[BlackboardEntry]:
         keys = self.redis.keys(f"{self.prefix}*")
         entries = []
@@ -54,7 +56,7 @@ class Blackboard:
             if data:
                 entries.append(BlackboardEntry.model_validate_json(data))
         return sorted(entries, key=lambda x: x.timestamp)
-        
+
     def clear(self):
         keys = self.redis.keys(f"{self.prefix}*")
         if keys:

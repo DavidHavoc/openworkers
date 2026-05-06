@@ -1,23 +1,22 @@
 import json
-import re
 import logging
-from typing import Dict, Any, List, Optional, Type, Callable
+import re
+from typing import Any, Callable, Dict, List, Type
 
 from pydantic import BaseModel
 
-from core.schemas import (
-    Task,
-    BlackboardEntry,
-    ResearchContext,
-    ResearchPlan,
-    LitMap,
-    LiteratureResult,
-    CitationAudit,
-    SynthesisReport,
-    CritiqueResult,
-)
-from providers.unified import UnifiedLLM, LLMResponse
 from core.orchestrator.compiler import PromptCompiler
+from core.schemas import (
+    BlackboardEntry,
+    CitationAudit,
+    CritiqueResult,
+    LiteratureResult,
+    LitMap,
+    ResearchPlan,
+    SynthesisReport,
+    Task,
+)
+from providers.unified import UnifiedLLM
 
 logger = logging.getLogger(__name__)
 

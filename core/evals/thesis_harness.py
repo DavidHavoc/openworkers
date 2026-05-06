@@ -1,22 +1,22 @@
 import asyncio
 import os
 import time
-from typing import Dict, Any, List, Optional
+from typing import List
 
+from core.memory.episodic import EpisodicMemory
+from core.orchestrator.thesis_flow import ThesisOrchestrator
+from core.router.engine import Router
 from core.schemas import (
-    ResearchContext,
-    ResearchSession,
-    ResearchPlan,
-    LitMap,
     CitationAudit,
     CritiqueResult,
+    LitMap,
+    ResearchContext,
+    ResearchPlan,
+    ResearchSession,
     SynthesisReport,
 )
-from core.memory.episodic import EpisodicMemory
-from core.router.engine import Router
 from providers.adapters import create_unified_llm
 from tools.mcp.engine import ToolRegistry
-from core.orchestrator.thesis_flow import ThesisOrchestrator
 
 
 class ThesisEvalResult:
@@ -69,7 +69,7 @@ class ThesisEvalHarness:
             if result.get("exists") and "Deep learning" in result.get("title", ""):
                 r.pass_("Known DOI verified  -  CrossRef tool returns correct metadata")
             elif not result.get("exists"):
-                r.fail(f"Known DOI 10.1038/nature14539 not found. API may be unavailable.")
+                r.fail("Known DOI 10.1038/nature14539 not found. API may be unavailable.")
             else:
                 r.pass_(f"DOI verified: title={result.get('title', '')[:60]}")
         except Exception as e:
@@ -231,7 +231,7 @@ class ThesisEvalHarness:
 
             for i in range(3):
                 t0 = time.monotonic()
-                session = await orch.execute(ResearchContext(
+                _ = await orch.execute(ResearchContext(
                     research_question=f"Test query {i}",
                     topic_summary=f"Test topic {i}.",
                     discipline="computer_science",

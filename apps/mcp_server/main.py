@@ -1,6 +1,6 @@
 import asyncio
-import os
 import logging
+import os
 
 from apps.mcp_server.server import ThesisMCPServer
 

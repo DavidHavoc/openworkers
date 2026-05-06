@@ -1,7 +1,7 @@
-from typing import Dict, Any, Optional
+from typing import Optional
 
-from core.schemas import CorpusStats, CorpusSection, CorpusContext
 from core.corpus.retrieve import CorpusRetrieve
+from core.schemas import CorpusContext, CorpusStats
 
 
 class CorpusAnalyzer:

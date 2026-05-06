@@ -1,12 +1,12 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from core.schemas import (
-    ResearchSession,
-    LitMap,
-    LiteratureResult,
     CitationAudit,
     CritiqueResult,
+    LiteratureResult,
+    LitMap,
+    ResearchSession,
     SynthesisReport,
 )
 
@@ -156,7 +156,7 @@ def format_session_text(session: ResearchSession) -> str:
         lines.append(f"  Plan ID: {rp.plan_id}")
         lines.append(f"  Strategy: {rp.strategy}")
         if rp.subquestions:
-            lines.append(f"  Subquestions:")
+            lines.append("  Subquestions:")
             for sq in rp.subquestions:
                 lines.append(f"    - {sq}")
         if rp.search_lanes:

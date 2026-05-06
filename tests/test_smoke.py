@@ -1,7 +1,9 @@
 import os
+
 os.environ["DRY_RUN"] = "true"
 
 from fastapi.testclient import TestClient
+
 from apps.api.main import app
 
 client = TestClient(app)

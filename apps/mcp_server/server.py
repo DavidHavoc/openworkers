@@ -1,17 +1,15 @@
 import asyncio
 import json
 import sys
-import os
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from core.schemas import ResearchContext
+from apps.shared.formatting import format_as_json
 from core.memory.episodic import EpisodicMemory
+from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
+from core.schemas import ResearchContext
 from providers.adapters import create_unified_llm
 from tools.mcp.engine import ToolRegistry
-from core.orchestrator.thesis_flow import ThesisOrchestrator
-from apps.shared.formatting import format_as_json
-
 
 TOOL_DEFINITIONS = [
     {

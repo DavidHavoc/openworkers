@@ -1,10 +1,12 @@
-import pytest
 import fakeredis
-from core.schemas import UserRequest, Task, BudgetState, MemoryBrief
+import pytest
+
 from core.blackboard.engine import Blackboard
-from core.router.engine import Router
 from core.memory.episodic import EpisodicMemory
 from core.orchestrator.flow import TaskOrchestrator
+from core.router.engine import Router
+from core.schemas import BudgetState, MemoryBrief, Task, UserRequest
+
 
 @pytest.fixture(autouse=True)
 def mock_redis(monkeypatch):
@@ -26,7 +28,7 @@ def test_blackboard_validation():
     bb = Blackboard()
     # Valid added
     bb.add_entry("task", {"desc": "test task"})
-    
+
     # Invalid entry type
     with pytest.raises(ValueError):
         bb.add_entry("invalid_type", {"data": "test"})
@@ -147,7 +149,13 @@ def test_router_privacy_trusted_forces_head_only(monkeypatch):
 
 def test_memory_retrieval():
     memory = EpisodicMemory(qdrant_location=":memory:")
-    from core.schemas import MemoryEpisode, EpisodeRoute, EpisodeModels, EpisodeMetrics, EpisodeQuality
+    from core.schemas import (
+        EpisodeMetrics,
+        EpisodeModels,
+        EpisodeQuality,
+        EpisodeRoute,
+        MemoryEpisode,
+    )
     # Store a mock dummy
     memory.store_episode(MemoryEpisode(
         episode_id="11111111-1111-1111-1111-111111111111",
@@ -160,7 +168,7 @@ def test_memory_retrieval():
         metrics=EpisodeMetrics(),
         quality=EpisodeQuality(accepted=True)
     ))
-    
+
     brief = memory.retrieve_guidance("test task", "test_type")
     assert brief.similar_past_tasks_count == 1
     assert "was the most consistently successful pattern" in brief.strongest_successful_pattern
@@ -171,17 +179,17 @@ async def test_orchestrator_happy_path(monkeypatch):
     memory = EpisodicMemory(qdrant_location=":memory:")
     router = Router()
     orchestrator = TaskOrchestrator(memory, router)
-    
+
     request = UserRequest(query="Do some research on deep learning.")
     result = await orchestrator.execute_task(request)
-    
+
     assert "session_id" in result
     assert "task_id" in result
     # For medium task, it should use 'head_workers' based on routing heuristic
     assert result["route_strategy"] == "head_workers"
     # Outputs should include worker and head
     assert len(result["outputs"]) == 2
-    
+
     # Check if memory stored the new episode
     brief = memory.retrieve_guidance("Do some research on deep learning.")
     assert brief.similar_past_tasks_count >= 1
@@ -189,10 +197,10 @@ async def test_orchestrator_happy_path(monkeypatch):
 
 def test_thesis_get_entries_delegates_to_blackboard():
     """_get_entries() returns blackboard entries without infinite recursion."""
-    from core.orchestrator.thesis_flow import ThesisOrchestrator
-    from providers.unified import UnifiedLLM
     from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
     from core.router.engine import Router
+    from providers.unified import UnifiedLLM
 
     bb = Blackboard()
     bb.add_entry("task", {"desc": "a"})
@@ -213,11 +221,11 @@ def test_thesis_get_entries_delegates_to_blackboard():
 @pytest.mark.asyncio
 async def test_thesis_pipeline_dry_run_completes(monkeypatch):
     """Full 8-stage thesis pipeline completes in DRY_RUN mode without fatal errors."""
-    from core.orchestrator.thesis_flow import ThesisOrchestrator
-    from providers.unified import UnifiedLLM
     from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
     from core.router.engine import Router
     from core.schemas import ResearchContext
+    from providers.unified import UnifiedLLM
     from tools.mcp.engine import ToolRegistry
 
     monkeypatch.setenv("DRY_RUN", "true")

@@ -2,21 +2,18 @@ import argparse
 import asyncio
 import os
 import sys
-from datetime import datetime
 
-from core.schemas import ResearchContext
+from apps.shared.formatting import (
+    format_as_json,
+    format_critique_text,
+    format_session_text,
+)
 from core.memory.episodic import EpisodicMemory
+from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
+from core.schemas import ResearchContext
 from providers.adapters import create_unified_llm
 from tools.mcp.engine import ToolRegistry
-from core.orchestrator.thesis_flow import ThesisOrchestrator
-from apps.shared.formatting import (
-    format_session_text,
-    format_critique_text,
-    format_lit_map_text,
-    format_citation_audit_text,
-    format_as_json,
-)
 
 
 def _create_orchestrator() -> ThesisOrchestrator:
@@ -235,7 +232,7 @@ def main():
     os.environ.setdefault("DRY_RUN", "true")
 
     try:
-        result = asyncio.run(handler(args))
+        _ = asyncio.run(handler(args))
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

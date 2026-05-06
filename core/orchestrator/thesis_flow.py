@@ -1,48 +1,45 @@
-import asyncio
-import json
-import uuid
 import time
+import uuid
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
+from core.blackboard.engine import Blackboard
+from core.corpus.analyze import CorpusAnalyzer
+from core.memory.episodic import EpisodicMemory
+from core.observability.metrics import obs_logger
+from core.orchestrator.compiler import PromptCompiler
+from core.router.engine import Router
 from core.schemas import (
-    Task,
     BlackboardEntry,
+    BudgetState,
+    CitationAudit,
+    CritiqueResult,
+    EpisodeMetrics,
+    EpisodeModels,
+    EpisodeQuality,
+    EpisodeRoute,
+    LitMap,
+    MemoryBrief,
+    MemoryEpisode,
     ResearchContext,
     ResearchPlan,
     ResearchSession,
-    LitMap,
-    LiteratureResult,
-    CitationAudit,
     SynthesisReport,
-    CritiqueResult,
-    MemoryBrief,
-    BudgetState,
-    MemoryEpisode,
-    EpisodeRoute,
-    EpisodeModels,
-    EpisodeMetrics,
-    EpisodeQuality,
+    Task,
 )
-from core.blackboard.engine import Blackboard
-from core.memory.episodic import EpisodicMemory
-from core.router.engine import Router
-from providers.unified import UnifiedLLM
 from providers.thesis_agents import (
-    ThesisHeadProvider,
-    ResearcherAgent,
     CheckerAgent,
-    SynthesizerAgent,
     CriticAgent,
-    _build_placeholder_lit_map,
+    ResearcherAgent,
+    SynthesizerAgent,
+    ThesisHeadProvider,
     _build_placeholder_citation_audit,
-    _build_placeholder_synthesis_report,
     _build_placeholder_critique_result,
+    _build_placeholder_lit_map,
     _build_placeholder_research_plan,
+    _build_placeholder_synthesis_report,
 )
-from core.orchestrator.compiler import PromptCompiler
-from core.corpus.analyze import CorpusAnalyzer
-from core.observability.metrics import obs_logger
+from providers.unified import UnifiedLLM
 
 
 class ThesisOrchestrator:
@@ -451,5 +448,5 @@ class ThesisOrchestrator:
                 mode="supervisor",
             )
             return result["output"]
-        except Exception as e:
+        except Exception:
             return _build_placeholder_critique_result()
