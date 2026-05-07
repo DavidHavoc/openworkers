@@ -271,12 +271,13 @@ async def test_thesis_pipeline_dry_run_completes(monkeypatch):
     assert session.critique is not None
 
 
-def test_session_store_save_and_load():
+@pytest.mark.asyncio
+async def test_session_store_save_and_load():
     """SessionStore.save() persists a session; load() retrieves it."""
     from core.schemas import ResearchContext, ResearchSession
-    from core.sessions.store import SessionStore
+    from core.sessions.store import RedisSessionStore
 
-    store = SessionStore()
+    store = RedisSessionStore()
 
     session = ResearchSession(
         session_id="test-session-001",
@@ -288,23 +289,24 @@ def test_session_store_save_and_load():
         created_at="2026-01-01T00:00:00Z",
         status="complete",
     )
-    store.save(session)
+    await store.save(session)
 
-    loaded = store.load("test-session-001")
+    loaded = await store.load("test-session-001")
     assert loaded is not None
     assert loaded.session_id == "test-session-001"
     assert loaded.research_context.research_question == "Test Q"
     assert loaded.status == "complete"
 
-    assert store.load("nonexistent") is None
+    assert await store.load("nonexistent") is None
 
 
-def test_session_store_list_and_count():
+@pytest.mark.asyncio
+async def test_session_store_list_and_count():
     """SessionStore.list_sessions() returns recent sessions; count() is accurate."""
     from core.schemas import ResearchContext, ResearchSession
-    from core.sessions.store import SessionStore
+    from core.sessions.store import RedisSessionStore
 
-    store = SessionStore()
+    store = RedisSessionStore()
     store.clear_all()
 
     for i in range(3):
@@ -318,23 +320,24 @@ def test_session_store_list_and_count():
             created_at="2026-01-01T00:00:00Z",
             status="complete",
         )
-        store.save(session)
+        await store.save(session)
 
-    assert store.count() == 3
+    assert await store.count() == 3
 
-    sessions = store.list_sessions(limit=10)
+    sessions = await store.list_sessions(limit=10)
     assert len(sessions) == 3
     for s in sessions:
         assert "session_id" in s
         assert "created_at" in s
 
 
-def test_session_store_delete():
+@pytest.mark.asyncio
+async def test_session_store_delete():
     """SessionStore.delete() removes a session and it's no longer loadable."""
     from core.schemas import ResearchContext, ResearchSession
-    from core.sessions.store import SessionStore
+    from core.sessions.store import RedisSessionStore
 
-    store = SessionStore()
+    store = RedisSessionStore()
     session = ResearchSession(
         session_id="delete-me",
         research_context=ResearchContext(
@@ -345,13 +348,13 @@ def test_session_store_delete():
         created_at="2026-01-01T00:00:00Z",
         status="complete",
     )
-    store.save(session)
-    assert store.load("delete-me") is not None
+    await store.save(session)
+    assert await store.load("delete-me") is not None
 
-    deleted = store.delete("delete-me")
+    deleted = await store.delete("delete-me")
     assert deleted is True
-    assert store.load("delete-me") is None
-    assert store.delete("nonexistent") is False
+    assert await store.load("delete-me") is None
+    assert await store.delete("nonexistent") is False
 
 
 @pytest.mark.asyncio
@@ -361,13 +364,13 @@ async def test_thesis_pipeline_auto_saves_session(monkeypatch):
     from core.orchestrator.thesis_flow import ThesisOrchestrator
     from core.router.engine import Router
     from core.schemas import ResearchContext
-    from core.sessions.store import SessionStore
+    from core.sessions.store import RedisSessionStore
     from providers.unified import UnifiedLLM
     from tools.mcp.engine import ToolRegistry
 
     monkeypatch.setenv("DRY_RUN", "true")
 
-    store = SessionStore()
+    store = RedisSessionStore()
     unified = UnifiedLLM()
     memory = EpisodicMemory(qdrant_location=":memory:")
     router = Router()
@@ -389,7 +392,7 @@ async def test_thesis_pipeline_auto_saves_session(monkeypatch):
     session = await orch.execute(rc)
 
     assert session.session_id
-    loaded = store.load(session.session_id)
+    loaded = await store.load(session.session_id)
     assert loaded is not None
     assert loaded.session_id == session.session_id
     assert loaded.research_context.research_question == "Does exercise improve focus?"

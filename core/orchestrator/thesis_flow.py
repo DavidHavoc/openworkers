@@ -27,7 +27,7 @@ from core.schemas import (
     SynthesisReport,
     Task,
 )
-from core.sessions.store import SessionStore
+from core.sessions.store import BaseSessionStore
 from providers.thesis_agents import (
     CheckerAgent,
     CriticAgent,
@@ -51,7 +51,7 @@ class ThesisOrchestrator:
         router: Router,
         blackboard: Optional[Blackboard] = None,
         tool_registry: Any = None,
-        session_store: Optional[SessionStore] = None,
+        session_store: Optional[BaseSessionStore] = None,
     ) -> None:
         self.unified = unified
         self.memory = memory
@@ -406,7 +406,7 @@ class ThesisOrchestrator:
         # ── Persist session ──
         if self.session_store:
             try:
-                self.session_store.save(session)
+                await self.session_store.save(session)
             except Exception:
                 pass
 

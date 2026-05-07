@@ -12,7 +12,7 @@ from core.memory.episodic import EpisodicMemory
 from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
 from core.schemas import ResearchContext
-from core.sessions.store import SessionStore
+from core.sessions.store import create_session_store
 from providers.adapters import create_unified_llm
 from tools.mcp.engine import ToolRegistry
 
@@ -22,7 +22,7 @@ def _create_orchestrator() -> ThesisOrchestrator:
     memory = EpisodicMemory(qdrant_location=":memory:")
     router = Router()
     tools = ToolRegistry()
-    store = SessionStore()
+    store = create_session_store()
     return ThesisOrchestrator(
         unified=unified,
         memory=memory,
@@ -127,8 +127,8 @@ async def cmd_papers(args):
 
 
 async def cmd_resume(args):
-    store = SessionStore()
-    session = store.load(args.session_id)
+    store = create_session_store()
+    session = await store.load(args.session_id)
     if session is None:
         print(f"Session {args.session_id} not found.", file=sys.stderr)
         sys.exit(1)
@@ -148,13 +148,20 @@ async def cmd_resume(args):
 
 
 async def cmd_sessions(args):
-    store = SessionStore()
-    sessions = store.list_sessions(limit=args.limit)
-    count = store.count()
+    store = create_session_store()
+    sessions = await store.list_sessions(
+        limit=args.limit,
+        discipline=args.discipline,
+        status=args.status,
+    )
+    count = await store.count()
 
     print(f"Past sessions ({count} total, showing {len(sessions)}):")
     for s in sessions:
-        print(f"  {s['session_id'][:8]}...  {s['created_at']}")
+        print(
+            f"  {s['session_id'][:8]}...  {s.get('discipline', '?')}  "
+            f"{s.get('status', '?')}  {s['created_at']}"
+        )
 
     if args.format == "json":
         _output({"count": count, "sessions": sessions}, "json", args.output)
@@ -235,6 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_sessions = sub.add_parser("sessions", help="List past research sessions")
     p_sessions.add_argument("--limit", type=int, default=20, help="Max sessions to show")
+    p_sessions.add_argument("--discipline", type=str, default=None, help="Filter by discipline")
+    p_sessions.add_argument(
+        "--status", type=str, default=None, choices=["complete", "partial"], help="Filter by status"
+    )
     add_output_args(p_sessions)
 
     p_corpus = sub.add_parser("corpus", help="Add a thesis to the corpus")
