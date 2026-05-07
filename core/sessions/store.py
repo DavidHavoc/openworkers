@@ -118,16 +118,16 @@ class PgSessionStore(BaseSessionStore):
     async def _migrate(self) -> None:
         pool = self._pool
         async with pool.acquire() as conn:
-            await conn.execute(
-                """CREATE TABLE IF NOT EXISTS sessions (
+            # fmt: off
+            await conn.execute("""CREATE TABLE IF NOT EXISTS sessions (
                     session_id      TEXT PRIMARY KEY,
                     research_question TEXT NOT NULL,
                     discipline      TEXT NOT NULL DEFAULT 'general',
                     status          TEXT NOT NULL DEFAULT 'complete',
                     data            JSONB NOT NULL,
                     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )"""
-            )
+                )""")
+            # fmt: on
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_sessions_discipline ON sessions (discipline)"
             )
