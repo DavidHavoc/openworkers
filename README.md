@@ -1,18 +1,26 @@
 # OpenWorkers
 
-A thesis assistant for students — searches real literature, critiques ideas, verifies citations. Does not write prose. Built on a multi-agent pipeline with provider-agnostic LLM routing (DeepSeek, Claude, ChatGPT).
+A thesis assistant: searches real literature, critiques ideas, verifies citations. Does not write prose. Built on a multi-agent pipeline with provider-agnostic LLM routing (DeepSeek, Claude, ChatGPT), designed to be accurate and cost-effective.
 
-## What it does
+## Capabilities
 
-Submit a research question. The system searches academic databases, classifies papers, audits citations, extracts methods and metrics, benchmarks against a thesis corpus, and produces a structured critique with counterarguments and suggestions.
-
-| Output | What's in it |
-|---|---|
-| Literature Map | Papers classified as supporting / challenging / adjacent, all with verified DOIs |
-| Citation Audit | Which claims have sources, which are missing, weak, or contested across the literature |
-| Synthesis Report | Methods, datasets, metrics extracted from papers; cross-paper comparisons |
-| Critique | Strengths, weaknesses, gaps, counterarguments citing specific papers, actionable suggestions |
-| Corpus Benchmarks | How your section length and citation density compare to successful theses |
+| # | Capability | What it does |
+|---|-----------|--------------|
+| 1 | **Literature Map** | Searches arXiv + Semantic Scholar, classifies papers as supporting / challenging / adjacent, all with verified DOIs |
+| 2 | **Citation Audit** | Checks which claims have sources; flags missing, weak, or contested citations across the literature |
+| 3 | **Synthesis Report** | Extracts methods, datasets, metrics from papers; cross-paper comparisons; consensus findings and knowledge gaps |
+| 4 | **Structured Critique** | Strengths, weaknesses, gaps, counterarguments citing specific papers, actionable suggestions for hardening your research |
+| 5 | **Corpus Benchmarks** | Ingest thesis PDFs to build a discipline-specific corpus; compare your section length and citation density against successful theses |
+| 6 | **Idea/Draft Critique** | Standalone critique of any claim, idea, or draft section without running a full literature search |
+| 7 | **Citation Verification** | Check if a DOI is real via CrossRef API; returns verified metadata (title, authors, year, publisher) or reports it doesn't exist |
+| 8 | **Quick Paper Search** | Search arXiv or Semantic Scholar by keyword — no LLM involved, no token cost; returns papers with verified IDs and citation counts |
+| 9 | **Session Management** | Resume prior research sessions from memory; list all past sessions |
+| 10 | **Multi-Provider LLM Router** | Provider-agnostic routing across DeepSeek, Claude, ChatGPT with health checks, fallback chains, budget tracking, and three quality tiers (quality / balanced / cheap) |
+| 11 | **Privacy Tiers** | Public / sanitized / trusted tiers gate which data sources each agent can access |
+| 12 | **JSON Output** | All commands support `--format json` and `--output file.json` for programmatic use and piping |
+| 13 | **MCP Server** | Exposes 4 tools over stdin/stdout for direct integration inside OpenCode and Claude Code editors |
+| 14 | **Evaluation Harness** | 7 built-in tests covering search recall, fake DOI detection, bad idea detection, cost measurement, synthesis quality, and full pipeline integrity |
+| 15 | **Dockerized** | Docker Compose with Redis, Qdrant, CLI runner, and MCP server services |
 
 ## Install
 
@@ -68,6 +76,8 @@ thesis critique "Social media causes depression because teens spend too much tim
 thesis verify "10.1038/nature14539"
 thesis papers "transformer attention" --source arxiv --limit 5
 thesis corpus ingest "thesis.pdf" --title "My Thesis" --discipline cs --year 2024
+thesis resume <session-id>
+thesis sessions
 ```
 
 `--format json` and `--output file.json` supported. See [docs/examples.md](docs/examples.md) for full output samples.
@@ -76,7 +86,7 @@ thesis corpus ingest "thesis.pdf" --title "My Thesis" --discipline cs --year 202
 
 The server exposes four tools over stdin/stdout: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`.
 
-**OpenCode** — add to `~/.config/opencode/opencode.json`:
+**OpenCode** - add to `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -92,7 +102,7 @@ The server exposes four tools over stdin/stdout: `thesis_research`, `thesis_crit
 }
 ```
 
-**Claude Code** — add to `~/.claude/mcp.json` or `.mcp.json` in your project:
+**Claude Code** - add to `~/.claude/mcp.json` or `.mcp.json` in your project:
 
 ```json
 {
@@ -132,7 +142,7 @@ Student -> CLI/MCP -> HEAD Planner -> Blackboard (Redis)
                                    -> ResearchSession
 ```
 
-All agents call through a single `UnifiedLLM` router mapping `quality`/`balanced`/`cheap` modes to your chosen provider. MCP tools (arXiv, Semantic Scholar, CrossRef) run API calls directly — no LLM involved. Full Mermaid diagram in [docs/architecture.md](docs/architecture.md).
+All agents call through a single `UnifiedLLM` router mapping `quality`/`balanced`/`cheap` modes to your chosen provider. MCP tools (arXiv, Semantic Scholar, CrossRef, DuckDuckGo) run API calls directly - no LLM involved. Full Mermaid diagram in [docs/architecture.md](docs/architecture.md).
 
 ## Contributing
 
