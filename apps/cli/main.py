@@ -12,6 +12,7 @@ from core.memory.episodic import EpisodicMemory
 from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
 from core.schemas import ResearchContext
+from core.sessions.store import SessionStore
 from providers.adapters import create_unified_llm
 from tools.mcp.engine import ToolRegistry
 
@@ -21,11 +22,13 @@ def _create_orchestrator() -> ThesisOrchestrator:
     memory = EpisodicMemory(qdrant_location=":memory:")
     router = Router()
     tools = ToolRegistry()
+    store = SessionStore()
     return ThesisOrchestrator(
         unified=unified,
         memory=memory,
         router=router,
         tool_registry=tools,
+        session_store=store,
     )
 
 
@@ -124,13 +127,38 @@ async def cmd_papers(args):
 
 
 async def cmd_resume(args):
-    print("Resume: loading session from Qdrant memory...")
-    memory = EpisodicMemory(qdrant_location=":memory:")
-    brief = memory.retrieve_guidance(args.session_id, task_type="thesis")
-    print(f"Memory hits: {brief.similar_past_tasks_count}")
-    print(f"Confidence: {brief.confidence}")
-    print(f"Recommendation: {brief.recommended_routing_bias}")
-    return brief
+    store = SessionStore()
+    session = store.load(args.session_id)
+    if session is None:
+        print(f"Session {args.session_id} not found.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Resumed session: {session.session_id}")
+    print(f"  Question: {session.research_context.research_question}")
+    print(f"  Discipline: {session.research_context.discipline}")
+    print(f"  Status: {session.status}")
+    print(f"  Created: {session.created_at}")
+
+    if args.format == "json":
+        _output(session, "json", args.output)
+    else:
+        text = format_session_text(session)
+        _output(text, "text", args.output)
+    return session
+
+
+async def cmd_sessions(args):
+    store = SessionStore()
+    sessions = store.list_sessions(limit=args.limit)
+    count = store.count()
+
+    print(f"Past sessions ({count} total, showing {len(sessions)}):")
+    for s in sessions:
+        print(f"  {s['session_id'][:8]}...  {s['created_at']}")
+
+    if args.format == "json":
+        _output({"count": count, "sessions": sessions}, "json", args.output)
+    return sessions
 
 
 async def cmd_corpus(args):
@@ -205,6 +233,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_resume.add_argument("session_id", type=str, help="Session ID to reload")
     add_output_args(p_resume)
 
+    p_sessions = sub.add_parser("sessions", help="List past research sessions")
+    p_sessions.add_argument("--limit", type=int, default=20, help="Max sessions to show")
+    add_output_args(p_sessions)
+
     p_corpus = sub.add_parser("corpus", help="Add a thesis to the corpus")
     p_corpus.add_argument("path", type=str, help="Path to PDF or text file")
     p_corpus.add_argument("--discipline", type=str, default="general")
@@ -226,6 +258,7 @@ def main():
         "verify": cmd_verify,
         "papers": cmd_papers,
         "resume": cmd_resume,
+        "sessions": cmd_sessions,
         "corpus": cmd_corpus,
     }
 

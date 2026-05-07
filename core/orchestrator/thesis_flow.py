@@ -27,6 +27,7 @@ from core.schemas import (
     SynthesisReport,
     Task,
 )
+from core.sessions.store import SessionStore
 from providers.thesis_agents import (
     CheckerAgent,
     CriticAgent,
@@ -50,12 +51,14 @@ class ThesisOrchestrator:
         router: Router,
         blackboard: Optional[Blackboard] = None,
         tool_registry: Any = None,
+        session_store: Optional[SessionStore] = None,
     ) -> None:
         self.unified = unified
         self.memory = memory
         self.router = router
         self.blackboard = blackboard or Blackboard()
         self.tool_registry = tool_registry
+        self.session_store = session_store
         self.compiler = PromptCompiler()
 
         self.head = ThesisHeadProvider(unified=unified, compiler=self.compiler)
@@ -399,6 +402,13 @@ class ThesisOrchestrator:
             self.memory.store_episode(episode)
         except Exception as e:
             obs_logger.log_event("store_episode_failed", session_id, {"error": str(e)})
+
+        # ── Persist session ──
+        if self.session_store:
+            try:
+                self.session_store.save(session)
+            except Exception:
+                pass
 
         obs_logger.log_trace(session_id, "thesis_pipeline", elapsed_ms, not bool(errors))
         obs_logger.log_event(

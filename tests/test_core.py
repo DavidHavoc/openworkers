@@ -269,3 +269,127 @@ async def test_thesis_pipeline_dry_run_completes(monkeypatch):
     assert session.citation_audit is not None
     assert session.synthesis_report is not None
     assert session.critique is not None
+
+
+def test_session_store_save_and_load():
+    """SessionStore.save() persists a session; load() retrieves it."""
+    from core.schemas import ResearchContext, ResearchSession
+    from core.sessions.store import SessionStore
+
+    store = SessionStore()
+
+    session = ResearchSession(
+        session_id="test-session-001",
+        research_context=ResearchContext(
+            research_question="Test Q",
+            topic_summary="Test summary",
+            discipline="test",
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        status="complete",
+    )
+    store.save(session)
+
+    loaded = store.load("test-session-001")
+    assert loaded is not None
+    assert loaded.session_id == "test-session-001"
+    assert loaded.research_context.research_question == "Test Q"
+    assert loaded.status == "complete"
+
+    assert store.load("nonexistent") is None
+
+
+def test_session_store_list_and_count():
+    """SessionStore.list_sessions() returns recent sessions; count() is accurate."""
+    from core.schemas import ResearchContext, ResearchSession
+    from core.sessions.store import SessionStore
+
+    store = SessionStore()
+    store.clear_all()
+
+    for i in range(3):
+        session = ResearchSession(
+            session_id=f"list-session-{i}",
+            research_context=ResearchContext(
+                research_question=f"Q{i}",
+                topic_summary=f"Summary {i}",
+                discipline="test",
+            ),
+            created_at="2026-01-01T00:00:00Z",
+            status="complete",
+        )
+        store.save(session)
+
+    assert store.count() == 3
+
+    sessions = store.list_sessions(limit=10)
+    assert len(sessions) == 3
+    for s in sessions:
+        assert "session_id" in s
+        assert "created_at" in s
+
+
+def test_session_store_delete():
+    """SessionStore.delete() removes a session and it's no longer loadable."""
+    from core.schemas import ResearchContext, ResearchSession
+    from core.sessions.store import SessionStore
+
+    store = SessionStore()
+    session = ResearchSession(
+        session_id="delete-me",
+        research_context=ResearchContext(
+            research_question="Delete test",
+            topic_summary="Delete summary",
+            discipline="test",
+        ),
+        created_at="2026-01-01T00:00:00Z",
+        status="complete",
+    )
+    store.save(session)
+    assert store.load("delete-me") is not None
+
+    deleted = store.delete("delete-me")
+    assert deleted is True
+    assert store.load("delete-me") is None
+    assert store.delete("nonexistent") is False
+
+
+@pytest.mark.asyncio
+async def test_thesis_pipeline_auto_saves_session(monkeypatch):
+    """Running the thesis pipeline with a session_store auto-saves the session."""
+    from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from core.router.engine import Router
+    from core.schemas import ResearchContext
+    from core.sessions.store import SessionStore
+    from providers.unified import UnifiedLLM
+    from tools.mcp.engine import ToolRegistry
+
+    monkeypatch.setenv("DRY_RUN", "true")
+
+    store = SessionStore()
+    unified = UnifiedLLM()
+    memory = EpisodicMemory(qdrant_location=":memory:")
+    router = Router()
+    tools = ToolRegistry()
+
+    orch = ThesisOrchestrator(
+        unified=unified,
+        memory=memory,
+        router=router,
+        tool_registry=tools,
+        session_store=store,
+    )
+
+    rc = ResearchContext(
+        research_question="Does exercise improve focus?",
+        topic_summary="A review of exercise and cognitive performance.",
+        discipline="psychology",
+    )
+    session = await orch.execute(rc)
+
+    assert session.session_id
+    loaded = store.load(session.session_id)
+    assert loaded is not None
+    assert loaded.session_id == session.session_id
+    assert loaded.research_context.research_question == "Does exercise improve focus?"
