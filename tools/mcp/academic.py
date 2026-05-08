@@ -17,7 +17,7 @@ ARXIV_NAMESPACES = {
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 2
 _RETRY_BASE_DELAY = 1.0
-_CONNECT_TIMEOUT = 10.0
+_CONNECT_TIMEOUT = 5.0
 
 _client: httpx.AsyncClient = None
 
@@ -78,7 +78,7 @@ class ArxivSearchTool(MCPTool):
     name = "arxiv_search"
     description = "Queries the arXiv API and returns papers with verified arXiv IDs."
     allowed_tiers = ["public", "sanitized", "trusted"]
-    timeout = 20
+    timeout = 12
 
     def get_input_schema(self) -> Dict[str, Any]:
         return {
@@ -225,7 +225,7 @@ class SemanticScholarSearchTool(MCPTool):
         "Queries the Semantic Scholar API and returns papers with DOIs and citation counts."
     )
     allowed_tiers = ["public", "sanitized", "trusted"]
-    timeout = 20
+    timeout = 12
 
     def get_input_schema(self) -> Dict[str, Any]:
         return {
