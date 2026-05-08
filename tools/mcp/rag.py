@@ -27,7 +27,7 @@ import logging
 import os
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from qdrant_client import QdrantClient
 
@@ -84,7 +84,7 @@ def _collection_for(name: str) -> str:
     return f"{COLLECTION_PREFIX}{safe}_{suffix}"
 
 
-def _is_sentence_terminator(words_so_far: List[str]) -> bool:
+def _is_sentence_terminator(words_so_far: list[str]) -> bool:
     """True if the last word in ``words_so_far`` is a real sentence ender.
 
     Skips terminators that look like abbreviations (``Dr.``, ``i.e.``, etc.).
@@ -98,7 +98,7 @@ def _is_sentence_terminator(words_so_far: List[str]) -> bool:
     return stem not in _ABBREV
 
 
-def _split_sentences(text: str) -> List[str]:
+def _split_sentences(text: str) -> list[str]:
     """Sentence-split with light abbreviation handling.
 
     Splits on ``.!?`` followed by whitespace, then re-glues fragments where
@@ -108,7 +108,7 @@ def _split_sentences(text: str) -> List[str]:
     if not raw:
         return []
 
-    merged: List[str] = []
+    merged: list[str] = []
     for piece in raw:
         if merged and _ends_with_abbrev(merged[-1]):
             merged[-1] = merged[-1] + " " + piece
@@ -127,7 +127,7 @@ def chunk_text(
     text: str,
     max_words: int = 300,
     overlap_words: int = 50,
-) -> List[str]:
+) -> list[str]:
     """Sentence-aware fixed-size chunking with word overlap.
 
     Splits on ``.!?`` boundaries (with abbreviation guards), then packs
@@ -152,19 +152,16 @@ def chunk_text(
 
     step = max_words - overlap_words
 
-    chunks: List[str] = []
-    buf: List[str] = []  # current chunk's sentences
+    chunks: list[str] = []
+    buf: list[str] = []  # current chunk's sentences
     buf_words = 0
-    carry: List[str] = []  # words to prepend to the next chunk (true overlap)
+    carry: list[str] = []  # words to prepend to the next chunk (true overlap)
 
     def flush() -> None:
         nonlocal buf, buf_words, carry
         if not buf:
             return
-        if carry:
-            chunk = " ".join(carry) + " " + " ".join(buf)
-        else:
-            chunk = " ".join(buf)
+        chunk = " ".join(carry) + " " + " ".join(buf) if carry else " ".join(buf)
         chunks.append(chunk)
         # Carry forward only from the freshly-finalised buf, never from
         # previous carries — prevents the overlap cascade flagged in WR-04.
@@ -259,7 +256,7 @@ class RAGIndexer:
 
     def __init__(
         self,
-        client: Optional[QdrantClient] = None,
+        client: QdrantClient | None = None,
         qdrant_path: str = "./qdrant_data",
     ) -> None:
         self.client = client or _build_qdrant(qdrant_path)
@@ -288,9 +285,9 @@ class RAGIndexer:
             return 0
 
         coll = self.ensure_collection(collection)
-        ids: List[str] = []
-        documents: List[str] = []
-        metadata: List[Dict[str, Any]] = []
+        ids: list[str] = []
+        documents: list[str] = []
+        metadata: list[dict[str, Any]] = []
         # IN-03: id derivation no longer includes a chunk-content prefix, so
         # re-ingesting a byte-identical file truly overwrites the existing
         # points instead of inserting near-duplicates whenever whitespace or
@@ -336,8 +333,8 @@ class RAGIndexer:
             overlap_words=overlap_words,
         )
 
-    def list_collections(self) -> List[str]:
-        names: List[str] = []
+    def list_collections(self) -> list[str]:
+        names: list[str] = []
         for c in self.client.get_collections().collections:
             if c.name.startswith(COLLECTION_PREFIX):
                 names.append(c.name[len(COLLECTION_PREFIX) :])
@@ -373,7 +370,7 @@ class RAGSearchTool(MCPTool):
 
     def __init__(
         self,
-        client: Optional[QdrantClient] = None,
+        client: QdrantClient | None = None,
         qdrant_path: str = "./qdrant_data",
     ) -> None:
         self._client = client
@@ -384,7 +381,7 @@ class RAGSearchTool(MCPTool):
             self._client = _build_qdrant(self._qdrant_path)
         return self._client
 
-    def get_input_schema(self) -> Dict[str, Any]:
+    def get_input_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -399,7 +396,7 @@ class RAGSearchTool(MCPTool):
             "required": ["query"],
         }
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -421,7 +418,7 @@ class RAGSearchTool(MCPTool):
             },
         }
 
-    async def execute_impl(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_impl(self, params: dict[str, Any]) -> dict[str, Any]:
         query = params.get("query", "")
         collection = params.get("collection") or "default"
         limit = int(params.get("limit", 5))
@@ -434,32 +431,42 @@ class RAGSearchTool(MCPTool):
             return {"papers": [], "total_results": 0}
 
         try:
-            results = await asyncio.to_thread(
-                client.query,
+            from core.embedding_cache import embed_text
+
+            # Vector name is the fastembed short alias (e.g. "fast-bge-small-en-v1.5"),
+            # not the full model name. Retrieve it from the client to stay in sync.
+            vec_params = client.get_fastembed_vector_params()
+            vec_name = next(iter(vec_params.keys())) if vec_params else EMBEDDING_MODEL
+            vector = await asyncio.to_thread(embed_text, query, EMBEDDING_MODEL)
+            response = await asyncio.to_thread(
+                client.query_points,
                 collection_name=coll,
-                query_text=query,
+                query=vector,
+                using=vec_name,
                 limit=limit,
+                with_payload=True,
             )
+            results = response.points
         except Exception as exc:  # pragma: no cover - depends on backend
             logger.warning("RAG query failed for collection %s: %s", coll, exc)
             return {"papers": [], "total_results": 0, "error": str(exc)}
 
-        papers: List[Dict[str, Any]] = []
+        papers: list[dict[str, Any]] = []
         for r in results:
-            meta = r.metadata or {}
-            label = meta.get("source_label", "rag_chunk")
-            chunk_idx = meta.get("chunk_index", 0)
-            source_path = meta.get("source_path", "")
+            payload = r.payload or {}
+            label = payload.get("source_label", "rag_chunk")
+            chunk_idx = payload.get("chunk_index", 0)
+            source_path = payload.get("source_path", "")
             papers.append(
                 {
                     "paper_id": str(r.id),
                     "title": f"{label} (chunk {chunk_idx})",
                     "authors": [],
                     "year": 0,
-                    "abstract": r.document or "",
+                    "abstract": payload.get("document", ""),
                     "url": f"file://{source_path}" if source_path else "",
                     "source": "rag",
-                    "score": float(getattr(r, "score", 0.0) or 0.0),
+                    "score": float(r.score or 0.0),
                 }
             )
         return {"papers": papers, "total_results": len(papers)}
