@@ -94,6 +94,8 @@ class ThesisMCPServer:
     def _get_orchestrator(self) -> ThesisOrchestrator:
         if self._orchestrator is None:
             unified = create_unified_llm()
+            if os.environ.get("QDRANT_URL"):
+                os.environ.pop("QDRANT_URL", None)
             memory = EpisodicMemory(qdrant_location=":memory:")
             router = Router()
             tools = ToolRegistry()
