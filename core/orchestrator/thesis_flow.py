@@ -29,6 +29,7 @@ from core.schemas import (
     Task,
 )
 from core.sessions.store import BaseSessionStore
+from providers.budget import BudgetGuard
 from providers.thesis_agents import (
     CheckerAgent,
     CriticAgent,
@@ -83,6 +84,15 @@ class ThesisOrchestrator:
             return []
 
     async def execute(self, research_context: ResearchContext) -> ResearchSession:
+        # Per-session budget ceiling. Reads MAX_BUDGET_USD from env and
+        # short-circuits any LLM call whose pre-estimate would exceed the
+        # remaining cap. contextvars-based so concurrent execute() calls
+        # on a shared orchestrator each get their own counter without
+        # threading the guard through every agent's signature.
+        with BudgetGuard():
+            return await self._execute_inner(research_context)
+
+    async def _execute_inner(self, research_context: ResearchContext) -> ResearchSession:
         start_time = time.time()
         session_id = str(uuid.uuid4())
         errors: List[str] = []

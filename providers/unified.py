@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import pybreaker
 
+from providers.budget import BudgetExceededError, get_current_guard
 from providers.resilience import (
     ProviderBreakerRegistry,
     call_with_resilience,
@@ -198,6 +199,26 @@ class UnifiedLLM:
                 logger.info(f"ROUTE: skipping {provider} (budget exhausted)")
                 continue
 
+            # Hard ceiling pre-check: if a session-scoped BudgetGuard is
+            # installed, refuse to even attempt the call when its estimate
+            # would push spend past the cap. The fallback chain still
+            # runs — a cheaper provider downstream may fit even when this
+            # one doesn't.
+            guard = get_current_guard()
+            if guard is not None and guard.enabled:
+                pre_estimate = guard.estimate(prompt, system_prompt, provider)
+                if not guard.check(pre_estimate):
+                    skipped.append(provider)
+                    last_error = BudgetExceededError(
+                        f"{provider} pre-call estimate ${pre_estimate:.6f} would "
+                        f"exceed remaining budget ${guard.remaining():.6f}"
+                    )
+                    logger.info(
+                        f"ROUTE: skipping {provider} (over budget: estimate "
+                        f"${pre_estimate:.6f}, remaining ${guard.remaining():.6f})"
+                    )
+                    continue
+
             model = (
                 preferred_model
                 if provider == preferred_provider
@@ -227,6 +248,8 @@ class UnifiedLLM:
 
                 if budget is not None:
                     self._add_spend(provider, cost)
+                if guard is not None:
+                    guard.record_actual(cost)
 
                 fallback = provider != preferred_provider
                 response = LLMResponse(

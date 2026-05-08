@@ -33,7 +33,7 @@ The 1.0 line targets a polished, packaged release on PyPI. The themes:
 ### Resilience
 - ✅ **Tenacity** retries with exponential jitter on transient provider errors — *shipped in 0.1.x*. Per-call retry of timeouts, 429s, and 5xx; permanent errors (auth, schema) raise instantly so the fallback chain advances. Configurable via `RESILIENCE_RETRY_*` env vars.
 - ✅ **pybreaker** circuit breakers per provider — *shipped in 0.1.x*. After `RESILIENCE_BREAKER_FAIL_MAX` (default 5) consecutive transient failures the provider is short-circuited for `RESILIENCE_BREAKER_RESET_SEC` (default 60s). Permanent errors are excluded from the trip threshold.
-- 📋 **Hard budget guard** — pre-call estimation aborts before exceeding `MAX_BUDGET_USD`
+- ✅ **Hard budget guard** — *shipped in 0.1.x*. `BudgetGuard` (per-session, `contextvars`-scoped) does conservative pre-call cost estimation; providers whose estimate would push spend past `MAX_BUDGET_USD` are skipped from the fallback chain. When every provider is over budget, `generate()` returns the `[ALL_PROVIDERS_FAILED]` response with a `BudgetExceededError` recorded in metadata.
 - ✅ **Parallel-safe stages** — *shipped in 0.1.x*. Phase A (planner ∥ memory ∥ corpus) runs via `asyncio.gather`; literature lanes + RAG queries fan out concurrently; Phase C (checker ∥ synthesizer) runs in parallel after the lit map is in. Regression tests assert each phase actually overlaps in wall-clock time.
 - 📋 Resumable / durable orchestration via Temporal or Prefect (likely 1.x, not 1.0)
 
