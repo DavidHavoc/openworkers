@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -25,8 +26,10 @@ app = FastAPI(
     version="0.2.0",
 )
 
+_MAX_TASKS = 1000
+
 # In-memory task store: task_id -> {status, result, error, created_at}
-_tasks: Dict[str, Dict[str, Any]] = {}
+_tasks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
 _task_handles: Dict[str, asyncio.Task] = {}
 
 
@@ -117,6 +120,8 @@ async def submit_task(request: TaskRequest):
         "error": None,
         "completed_at": None,
     }
+    while len(_tasks) > _MAX_TASKS:
+        _tasks.popitem(last=False)
     handle = asyncio.create_task(_run_task(task_id, request))
     _task_handles[task_id] = handle
     return TaskResponse(task_id=task_id, status="queued", created_at=created_at)
