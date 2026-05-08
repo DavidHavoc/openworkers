@@ -110,6 +110,9 @@ class ThesisMCPServer:
         req_id = request.get("id")
         params = request.get("params", {}) or {}
 
+        if req_id is None:
+            return None
+
         if method == "initialize":
             return {
                 "jsonrpc": "2.0",
