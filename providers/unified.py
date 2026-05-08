@@ -204,15 +204,21 @@ class UnifiedLLM:
                 else self._default_model_for(provider)
             )
 
+            # Each per-provider attempt now goes through (breaker → retry).
+            # Transient failures retry inside this call; sustained failure
+            # trips the breaker so subsequent calls in this and future
+            # sessions skip the provider until the reset timeout expires.
+            current_provider = provider
+            current_model = model
+
+            async def _attempt() -> str:
+                return await self._call_provider(
+                    current_provider, current_model, prompt, system_prompt, response_schema
+                )
+
             try:
-                # Each per-provider attempt now goes through (breaker → retry).
-                # Transient failures retry inside this call; sustained failure
-                # trips the breaker so subsequent calls in this and future
-                # sessions skip the provider until the reset timeout expires.
                 result = await call_with_resilience(
-                    lambda p=provider, m=model: self._call_provider(
-                        p, m, prompt, system_prompt, response_schema
-                    ),
+                    _attempt,
                     provider=provider,
                     registry=self.breakers,
                 )

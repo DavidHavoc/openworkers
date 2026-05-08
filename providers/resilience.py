@@ -158,7 +158,12 @@ class _BreakerListener(pybreaker.CircuitBreakerListener):
     def __init__(self, provider: str) -> None:
         self.provider = provider
 
-    def state_change(self, cb, old_state, new_state):  # noqa: ANN001
+    def state_change(
+        self,
+        cb: pybreaker.CircuitBreaker,
+        old_state: Optional[pybreaker.CircuitBreakerState],
+        new_state: pybreaker.CircuitBreakerState,
+    ) -> None:
         old_name = getattr(old_state, "name", str(old_state))
         new_name = getattr(new_state, "name", str(new_state))
         logger.info(
@@ -259,16 +264,16 @@ async def _async_breaker_call(
             )
         breaker.half_open()
 
-    for listener in breaker.listeners:
-        listener.before_call(breaker, fn)
+    for before_listener in breaker.listeners:
+        before_listener.before_call(breaker, fn)
 
     try:
         result = await fn()
     except BaseException as exc:
         if breaker.is_system_error(exc):
             breaker._state_storage.increment_counter()
-            for listener in breaker.listeners:
-                listener.failure(breaker, exc)
+            for fail_listener in breaker.listeners:
+                fail_listener.failure(breaker, exc)
             if breaker.fail_counter >= breaker.fail_max:
                 breaker.open()
         else:
@@ -280,8 +285,8 @@ async def _async_breaker_call(
         raise
 
     breaker._state_storage.reset_counter()
-    for listener in breaker.listeners:
-        listener.success(breaker)
+    for success_listener in breaker.listeners:
+        success_listener.success(breaker)
     if breaker.current_state == pybreaker.STATE_HALF_OPEN:
         breaker.close()
     return result
