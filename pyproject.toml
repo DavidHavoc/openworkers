@@ -16,6 +16,8 @@ dependencies = [
     "duckduckgo-search>=5.2.0",
     "pymupdf>=1.24.0",
     "httpx>=0.27.0",
+    "tenacity>=9.0.0",
+    "pybreaker>=1.2.0",
 ]
 
 [project.optional-dependencies]
