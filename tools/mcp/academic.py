@@ -79,6 +79,7 @@ class ArxivSearchTool(MCPTool):
     description = "Queries the arXiv API and returns papers with verified arXiv IDs."
     allowed_tiers = ["public", "sanitized", "trusted"]
     timeout = 12
+    cacheable = True
 
     def get_input_schema(self) -> Dict[str, Any]:
         return {
@@ -221,6 +222,7 @@ class ArxivSearchTool(MCPTool):
 
 class SemanticScholarSearchTool(MCPTool):
     name = "semantic_scholar_search"
+    cacheable = True
     description = (
         "Queries the Semantic Scholar API and returns papers with DOIs and citation counts."
     )
@@ -320,6 +322,7 @@ class SemanticScholarSearchTool(MCPTool):
 
 class CrossRefVerificationTool(MCPTool):
     name = "crossref_verification"
+    cacheable = True
     description = (
         "Verifies a DOI exists via the CrossRef API. Returns real metadata or {exists: false}."
     )

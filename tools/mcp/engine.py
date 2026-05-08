@@ -6,6 +6,8 @@ from typing import Any
 
 from duckduckgo_search import DDGS
 
+from tools.cache import SearchCache, get_default_cache
+
 
 class MCPTool(ABC):
     """Base class for MCP-style tools."""
@@ -14,6 +16,10 @@ class MCPTool(ABC):
     description: str = "Base description"
     allowed_tiers: list[str] = ["public", "sanitized", "trusted"]
     timeout: int = 10  # seconds
+    # Subclasses set ``cacheable = True`` to participate in the Redis-backed
+    # search cache. Tools whose results depend on session-local state (RAG
+    # collections, knowledge base, structured DB) leave this False.
+    cacheable: bool = False
 
     @abstractmethod
     def get_input_schema(self) -> dict[str, Any]:
@@ -27,12 +33,23 @@ class MCPTool(ABC):
     async def execute_impl(self, params: dict[str, Any]) -> dict[str, Any]:
         pass
 
+    def _cache(self) -> SearchCache:
+        """Override in tests to inject a fake cache."""
+        return get_default_cache()
+
     async def execute(self, params: dict[str, Any], privacy_tier: str) -> dict[str, Any]:
         """Wrapper to enforce permissions, timeouts (simulated), and audit logging."""
         if privacy_tier not in self.allowed_tiers:
             error_msg = f"Security Violation: Tier '{privacy_tier}' not allowed to access tool '{self.name}'."
             logging.warning(error_msg)
             return {"error": error_msg}
+
+        cache = self._cache() if self.cacheable else None
+        if cache is not None:
+            cached = cache.get(self.name, params)
+            if cached is not None:
+                logging.info(f"AUDIT: cache HIT for '{self.name}' params={params}")
+                return cached
 
         start_time = time.time()
         logging.info(
@@ -44,6 +61,8 @@ class MCPTool(ABC):
             result = await self.execute_impl(params)
             duration = time.time() - start_time
             logging.info(f"AUDIT: Tool '{self.name}' completed in {duration:.2f}s")
+            if cache is not None:
+                cache.set(self.name, params, result)
             return result
         except Exception as e:
             logging.error(f"AUDIT: Tool '{self.name}' failed: {str(e)}")
