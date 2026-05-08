@@ -34,6 +34,7 @@ class Blackboard:
             "critique",
             "citation_audit",
             "corpus_benchmarks",
+            "memory_guidance",
         }
         if entry_type not in allowed_types:
             raise ValueError(f"Invalid entry_type '{entry_type}'. Must be one of {allowed_types}")
