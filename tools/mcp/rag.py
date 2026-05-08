@@ -179,17 +179,16 @@ def chunk_text(
             continue
 
         # WR-02: hard-split a single oversized sentence into word-windows so
-        # no chunk exceeds max_words.
+        # no chunk exceeds max_words. Step-based indexing provides overlap
+        # internally; external carry would inflate chunk size beyond max_words.
         if len(words) > max_words:
             flush()
+            carry = []
             for i in range(0, len(words), step):
                 window = words[i : i + max_words]
                 if not window:
                     continue
-                if carry:
-                    chunks.append(" ".join(carry) + " " + " ".join(window))
-                else:
-                    chunks.append(" ".join(window))
+                chunks.append(" ".join(window))
                 carry = window[-overlap_words:] if overlap_words else []
             continue
 
