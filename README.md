@@ -113,7 +113,7 @@ thesis research "..." --rag-collection my_papers   # also retrieve from your own
 thesis critique "Social media causes depression because teens spend too much time online"
 thesis verify "10.1038/nature14539"
 thesis papers "transformer attention" --source arxiv --limit 5
-thesis corpus ingest thesis.pdf --title "My Thesis" --discipline cs --year 2024
+thesis corpus thesis.pdf --title "My Thesis" --discipline cs --year 2024
 thesis ingest add paper.pdf --collection my_papers   # add to your RAG corpus
 thesis ingest list
 thesis sessions
@@ -187,3 +187,52 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 ## License
 
 [MIT](LICENSE-MIT).
+
+## FastAPI app
+
+The FastAPI app (`apps/api/main.py`) provides an async HTTP interface for programmatic access. Start it with:
+
+```bash
+uvicorn apps.api.main:app --reload
+# or
+make dev
+```
+
+The server starts on `http://localhost:8000` by default. Interactive docs are available at `http://localhost:8000/docs`.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check — returns status and pending task count |
+| `POST` | `/tasks/` | Submit a research task (returns `task_id`, status `202`) |
+| `GET` | `/tasks/` | List all tasks with their current status |
+| `GET` | `/tasks/{task_id}` | Poll a task for status and result |
+| `DELETE` | `/tasks/{task_id}` | Remove a completed or failed task |
+
+### Example: submit and poll a task
+
+```bash
+# Submit
+curl -s -X POST http://localhost:8000/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Does retrieval-augmented generation improve factuality?", "discipline": "computer_science", "mode": "balanced"}' \
+| jq .
+# {"task_id": "abc-123", "status": "queued", "created_at": "..."}
+
+# Poll until complete
+curl -s http://localhost:8000/tasks/abc-123 | jq '.status'
+```
+
+**Request fields:**
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `query` | yes | — | Research question to investigate |
+| `discipline` | no | `general` | Subject area (e.g. `computer_science`, `psychology`) |
+| `topic_summary` | no | same as `query` | One-sentence context for the planner |
+| `existing_knowledge` | no | `""` | What the user already knows |
+| `what_they_need` | no | `""` | Specific output they are looking for |
+| `mode` | no | `balanced` | LLM tier to use: `quality`, `balanced`, or `cheap` |
+
+Tasks run asynchronously in the background. Poll `GET /tasks/{task_id}` until `status` is `complete` or `failed`. The `result` field contains a full `ResearchSession` object in the same shape as the CLI JSON output.

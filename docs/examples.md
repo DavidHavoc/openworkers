@@ -189,7 +189,7 @@ $ cat result.json | jq '.critique.overall_assessment'
 ## Ingest a thesis into the corpus
 
 ```bash
-$ thesis corpus ingest "thesis.pdf" \
+$ thesis corpus "thesis.pdf" \
     --title "Deep Learning for Medical Image Segmentation" \
     --discipline computer_science \
     --university "Stanford" \
@@ -258,4 +258,3 @@ Returns raw paper list from arXiv with verified arXiv IDs. No LLM token cost for
 > I'm writing a thesis on photonic computing for AI accelerators. Find relevant papers, then check if this claim holds: "Photonics offers 10x energy efficiency over electronics for matrix multiplication." Finally critique my methodology section below...
 
 The assistant runs a multi-step session: lit search first, then citation verification against found papers, then structured critique of the draft section — all in one conversation.
-
