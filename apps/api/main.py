@@ -7,7 +7,6 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from apps.shared.formatting import format_as_json
 from core.memory.episodic import EpisodicMemory
 from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
