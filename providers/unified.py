@@ -131,9 +131,12 @@ class UnifiedLLM:
     def validate_startup(self) -> None:
         if self.dry_run:
             return
+        from core.config import get_settings
+
+        settings = get_settings()
         for mode in ("quality", "balanced", "cheap"):
             key = mode.upper()
-            if not os.environ.get(f"THESIS_{key}_PROVIDER"):
+            if not getattr(settings, f"thesis_{mode}_provider", ""):
                 raise RuntimeError(
                     f"THESIS_{key}_PROVIDER is not set. "
                     f"Configure THESIS_{key}_PROVIDER and THESIS_{key}_MODEL in your .env file. "
