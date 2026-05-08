@@ -238,7 +238,9 @@ def extract_text(path: str) -> str:
 
 
 def _build_qdrant(qdrant_path: str = "./qdrant_data") -> QdrantClient:
-    qdrant_url = os.environ.get("QDRANT_URL")
+    from core.config import get_settings
+
+    qdrant_url = get_settings().qdrant_url
     if qdrant_url:
         client = QdrantClient(url=qdrant_url)
     elif qdrant_path == ":memory:":

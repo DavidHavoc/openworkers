@@ -1,4 +1,3 @@
-import os
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -15,8 +14,9 @@ class Blackboard:
     """
 
     def __init__(self, session_id: Optional[str] = None):
-        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-        self.redis = redis.from_url(redis_url, decode_responses=True)
+        from core.config import get_settings
+
+        self.redis = redis.from_url(get_settings().redis_url, decode_responses=True)
         self.session_id = session_id or str(uuid.uuid4())
         self.prefix = f"blackboard:{self.session_id}:"
 

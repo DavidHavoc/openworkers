@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from core.logging import configure_logging
 from core.memory.episodic import EpisodicMemory
 from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
@@ -15,6 +16,7 @@ from core.sessions.store import create_session_store
 from providers.adapters import create_unified_llm
 from tools.mcp.engine import ToolRegistry
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(

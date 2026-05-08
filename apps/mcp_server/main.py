@@ -1,14 +1,12 @@
 import asyncio
 import logging
-import os
 
 from apps.mcp_server.server import ThesisMCPServer
-
-logging.basicConfig(level=logging.WARNING)
+from core.logging import configure_logging
 
 
 async def main():
-    os.environ.setdefault("DRY_RUN", "true")
+    configure_logging(level=logging.WARNING)
     server = ThesisMCPServer()
     await server.run()
 

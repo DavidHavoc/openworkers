@@ -1,4 +1,3 @@
-import os
 import re
 import uuid
 from typing import Any, List
@@ -142,7 +141,9 @@ def _extract_text_from_pdf(filepath: str) -> str:
 
 class CorpusIngest:
     def __init__(self, path: str = "./qdrant_data"):
-        qdrant_url = os.environ.get("QDRANT_URL")
+        from core.config import get_settings
+
+        qdrant_url = get_settings().qdrant_url
         if qdrant_url:
             self.client = QdrantClient(url=qdrant_url)
         elif path == ":memory:":

@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -65,15 +64,21 @@ def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
 
 
 def _read_mode_config(mode: str, dry_run: bool = False) -> tuple[str, str]:
+    from core.config import get_settings
+
+    settings = get_settings()
     key = mode.upper()
-    provider = os.environ.get(f"THESIS_{key}_PROVIDER", "").strip().lower()
-    model = os.environ.get(f"THESIS_{key}_MODEL", "").strip()
+    mode_lower = mode.lower()
+    if mode_lower == "auto":
+        return _read_mode_config("balanced", dry_run=dry_run)
+
+    provider: str = getattr(settings, f"thesis_{mode_lower}_provider", "").strip().lower()
+    model: str = getattr(settings, f"thesis_{mode_lower}_model", "").strip()
+
     if not provider:
         if dry_run:
-            if mode == "auto":
-                return _read_mode_config("balanced", dry_run=True)
             defaults = {"quality": "anthropic", "balanced": "openai", "cheap": "deepseek"}
-            provider = defaults.get(mode, "openai")
+            provider = defaults.get(mode_lower, "openai")
         else:
             raise RuntimeError(
                 f"THESIS_{key}_PROVIDER is not set. "
@@ -113,7 +118,9 @@ class UnifiedLLM:
         blackboard: Any = None,
         breaker_registry: Optional[ProviderBreakerRegistry] = None,
     ) -> None:
-        self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
+        from core.config import get_settings
+
+        self.dry_run = get_settings().dry_run
         self.blackboard = blackboard
         self.health_cache = ProviderHealthCache()
         self.breakers = breaker_registry or get_default_registry()
@@ -124,9 +131,12 @@ class UnifiedLLM:
     def validate_startup(self) -> None:
         if self.dry_run:
             return
+        from core.config import get_settings
+
+        settings = get_settings()
         for mode in ("quality", "balanced", "cheap"):
             key = mode.upper()
-            if not os.environ.get(f"THESIS_{key}_PROVIDER"):
+            if not getattr(settings, f"thesis_{mode}_provider", ""):
                 raise RuntimeError(
                     f"THESIS_{key}_PROVIDER is not set. "
                     f"Configure THESIS_{key}_PROVIDER and THESIS_{key}_MODEL in your .env file. "
