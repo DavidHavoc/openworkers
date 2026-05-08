@@ -53,9 +53,8 @@ class Blackboard:
         return entry
 
     def get_entries_by_type(self, entry_type: str) -> List[BlackboardEntry]:
-        keys = self.redis.keys(f"{self.prefix}*")
         entries = []
-        for k in keys:
+        for k in self.redis.scan_iter(f"{self.prefix}*"):
             data = self.redis.get(k)
             if data:
                 entry = BlackboardEntry.model_validate_json(data)
@@ -64,9 +63,8 @@ class Blackboard:
         return sorted(entries, key=lambda x: x.timestamp)
 
     def get_all_entries(self) -> List[BlackboardEntry]:
-        keys = self.redis.keys(f"{self.prefix}*")
         entries = []
-        for k in keys:
+        for k in self.redis.scan_iter(f"{self.prefix}*"):
             data = self.redis.get(k)
             if data:
                 entries.append(BlackboardEntry.model_validate_json(data))
