@@ -143,7 +143,6 @@ class LLMAdapter:
         kwargs: Dict[str, Any] = {
             "model": model_name,
             "messages": messages,
-            "timeout": 120,
         }
 
         if response_schema:
