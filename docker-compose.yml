@@ -45,6 +45,9 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - .:/app
+      - fastembed_cache:/root/.cache/huggingface
     stdin_open: true
     depends_on:
       redis:
@@ -54,3 +57,4 @@ services:
 
 volumes:
   qdrant_data:
+  fastembed_cache:
