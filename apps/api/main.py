@@ -27,6 +27,7 @@ app = FastAPI(
 
 # In-memory task store: task_id -> {status, result, error, created_at}
 _tasks: Dict[str, Dict[str, Any]] = {}
+_task_handles: Dict[str, asyncio.Task] = {}
 
 
 class TaskRequest(BaseModel):
@@ -70,6 +71,8 @@ def _make_orchestrator() -> ThesisOrchestrator:
 
 async def _run_task(task_id: str, request: TaskRequest) -> None:
     try:
+        if task_id not in _tasks:
+            return
         _tasks[task_id]["status"] = "running"
         orch = _make_orchestrator()
         rc = ResearchContext(
@@ -80,14 +83,22 @@ async def _run_task(task_id: str, request: TaskRequest) -> None:
             what_they_need=request.what_they_need or "",
         )
         session = await orch.execute(rc)
+        if task_id not in _tasks:
+            return
         _tasks[task_id]["status"] = "complete"
         _tasks[task_id]["result"] = session.model_dump()
         _tasks[task_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+    except asyncio.CancelledError:
+        return
     except Exception as exc:
         logger.exception("Task %s failed", task_id)
+        if task_id not in _tasks:
+            return
         _tasks[task_id]["status"] = "failed"
         _tasks[task_id]["error"] = str(exc)
         _tasks[task_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+    finally:
+        _task_handles.pop(task_id, None)
 
 
 @app.get("/health")
@@ -106,7 +117,8 @@ async def submit_task(request: TaskRequest):
         "error": None,
         "completed_at": None,
     }
-    asyncio.create_task(_run_task(task_id, request))
+    handle = asyncio.create_task(_run_task(task_id, request))
+    _task_handles[task_id] = handle
     return TaskResponse(task_id=task_id, status="queued", created_at=created_at)
 
 
@@ -142,4 +154,7 @@ async def list_tasks():
 async def delete_task(task_id: str):
     if task_id not in _tasks:
         raise HTTPException(status_code=404, detail=f"Task {task_id!r} not found")
+    handle = _task_handles.pop(task_id, None)
+    if handle and not handle.done():
+        handle.cancel()
     del _tasks[task_id]
