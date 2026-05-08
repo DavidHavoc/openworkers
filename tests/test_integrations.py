@@ -231,14 +231,14 @@ def test_http_client_uses_connection_pooling():
 
 
 def test_timeout_configuration():
-    """The shared httpx client has connect=10s, read=30s configured."""
+    """The shared httpx client has connect=5s, read=30s, write=10s configured."""
     import tools.mcp.academic as academic
     from tools.mcp.academic import _get_client
 
     academic._client = None
     client = _get_client()
     timeout = client.timeout
-    assert timeout.connect == 10.0
+    assert timeout.connect == 5.0
     assert timeout.read == 30.0
     assert timeout.write == 10.0
 
