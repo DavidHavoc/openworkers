@@ -358,6 +358,227 @@ async def test_session_store_delete():
 
 
 @pytest.mark.asyncio
+async def test_search_literature_lanes_run_parallel(monkeypatch, tmp_path):
+    """Literature search lanes are dispatched concurrently, not serially.
+
+    Patches the inner lane fetcher to sleep, then asserts the wall-clock
+    cost of N lanes is closer to 1×SLEEP than to N×SLEEP. Regression guard:
+    a refactor that drops the asyncio.gather will trip this.
+    """
+    import asyncio
+    import time as _time
+
+    from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from core.router.engine import Router
+    from core.schemas import ResearchPlan
+    from providers.unified import UnifiedLLM
+    from tools.mcp.engine import ToolRegistry
+
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.chdir(tmp_path)
+
+    SLEEP = 0.30
+
+    orch = ThesisOrchestrator(
+        unified=UnifiedLLM(),
+        memory=EpisodicMemory(qdrant_location=":memory:"),
+        router=Router(),
+        tool_registry=ToolRegistry(),
+    )
+
+    async def _slow_lane(query, source="semantic_scholar", limit=10):
+        await asyncio.sleep(SLEEP)
+        return [{"paper_id": f"{source}:{query}", "source": source}]
+
+    orch._search_literature_raw_inner = _slow_lane  # type: ignore[method-assign]
+
+    plan = ResearchPlan(
+        plan_id="p1",
+        research_question="Q",
+        scope="exploratory",
+        deliverables=[],
+        subquestions=[],
+        search_lanes=[
+            {"query": "a", "source": "arxiv"},
+            {"query": "b", "source": "semantic_scholar"},
+            {"query": "c", "source": "crossref"},
+        ],
+    )
+
+    t0 = _time.perf_counter()
+    results = await orch._search_literature_from_plan(plan, rag_collection=None, session_id="t")
+    elapsed = _time.perf_counter() - t0
+
+    assert len(results) == 3
+    # Sequential bound: 3 * SLEEP. Allow generous slack for runner jitter.
+    assert elapsed < 2 * SLEEP, (
+        f"lanes ran sequentially: elapsed={elapsed:.2f}s "
+        f"(expected near {SLEEP:.2f}s, sequential would be {3 * SLEEP:.2f}s)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_thesis_pipeline_phase_a_runs_parallel(monkeypatch, tmp_path):
+    """Phase A — planner ∥ memory ∥ corpus — actually overlaps in time.
+
+    Records each stage's start/end timestamps and asserts that all three
+    intervals overlap. Regression guard: refactors that re-serialise the
+    pre-pipeline (e.g. awaiting planner before kicking off memory) will
+    trip this — sequential execution produces non-overlapping intervals.
+    """
+    import asyncio
+    import time as _time
+
+    from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from core.router.engine import Router
+    from core.schemas import ResearchContext
+    from providers.unified import UnifiedLLM
+    from tools.mcp.engine import ToolRegistry
+
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.chdir(tmp_path)  # isolate per-test qdrant_data lockfile
+
+    SLEEP = 0.30
+
+    unified = UnifiedLLM()
+    memory = EpisodicMemory(qdrant_location=":memory:")
+    router = Router()
+    tools = ToolRegistry()
+    orch = ThesisOrchestrator(unified=unified, memory=memory, router=router, tool_registry=tools)
+
+    intervals: list[tuple[str, float, float]] = []
+
+    real_head = orch.head.execute
+
+    async def _timed_planner(task, ctx, mode="planner"):
+        if mode != "planner":
+            return await real_head(task, ctx, mode=mode)
+        start = _time.perf_counter()
+        await asyncio.sleep(SLEEP)
+        out = await real_head(task, ctx, mode=mode)
+        intervals.append(("planner", start, _time.perf_counter()))
+        return out
+
+    orch.head.execute = _timed_planner  # type: ignore[method-assign]
+
+    real_memory = orch.memory.retrieve_guidance
+
+    def _timed_memory(*args, **kwargs):
+        start = _time.perf_counter()
+        _time.sleep(SLEEP)
+        out = real_memory(*args, **kwargs)
+        intervals.append(("memory", start, _time.perf_counter()))
+        return out
+
+    orch.memory.retrieve_guidance = _timed_memory  # type: ignore[method-assign]
+
+    real_corpus = orch.corpus.analyze
+
+    def _timed_corpus(*args, **kwargs):
+        start = _time.perf_counter()
+        _time.sleep(SLEEP)
+        out = real_corpus(*args, **kwargs)
+        intervals.append(("corpus", start, _time.perf_counter()))
+        return out
+
+    orch.corpus.analyze = _timed_corpus  # type: ignore[method-assign]
+
+    rc = ResearchContext(
+        research_question="Does sleep improve recall?",
+        topic_summary="A meta-analysis.",
+        discipline="psychology",
+    )
+    await orch.execute(rc)
+
+    spans = {name: (s, e) for name, s, e in intervals}
+    assert {
+        "planner",
+        "memory",
+        "corpus",
+    } <= spans.keys(), f"missing stage timing: got {sorted(spans.keys())}"
+    # Pairwise overlap: every pair of phase-A stages must overlap by at
+    # least half a SLEEP (a sequential schedule would have zero overlap).
+    pairs = [("planner", "memory"), ("planner", "corpus"), ("memory", "corpus")]
+    for a, b in pairs:
+        sa, ea = spans[a]
+        sb, eb = spans[b]
+        overlap = max(0.0, min(ea, eb) - max(sa, sb))
+        assert overlap > SLEEP * 0.5, (
+            f"{a} and {b} did not overlap: {a}=[{sa:.3f},{ea:.3f}] "
+            f"{b}=[{sb:.3f},{eb:.3f}] overlap={overlap:.3f}s"
+        )
+
+
+@pytest.mark.asyncio
+async def test_thesis_pipeline_phase_c_runs_parallel(monkeypatch, tmp_path):
+    """Phase C — checker ∥ synthesizer — actually overlaps in time."""
+    import asyncio
+    import time as _time
+
+    from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from core.router.engine import Router
+    from core.schemas import ResearchContext
+    from providers.unified import UnifiedLLM
+    from tools.mcp.engine import ToolRegistry
+
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.chdir(tmp_path)
+
+    SLEEP = 0.40
+
+    unified = UnifiedLLM()
+    memory = EpisodicMemory(qdrant_location=":memory:")
+    router = Router()
+    tools = ToolRegistry()
+    orch = ThesisOrchestrator(unified=unified, memory=memory, router=router, tool_registry=tools)
+
+    intervals: list[tuple[str, float, float]] = []
+
+    real_checker = orch.checker.execute
+
+    async def _timed_checker(task, ctx):
+        start = _time.perf_counter()
+        await asyncio.sleep(SLEEP)
+        out = await real_checker(task, ctx)
+        intervals.append(("checker", start, _time.perf_counter()))
+        return out
+
+    orch.checker.execute = _timed_checker  # type: ignore[method-assign]
+
+    real_synth = orch.synthesizer.execute
+
+    async def _timed_synth(task, ctx):
+        start = _time.perf_counter()
+        await asyncio.sleep(SLEEP)
+        out = await real_synth(task, ctx)
+        intervals.append(("synthesizer", start, _time.perf_counter()))
+        return out
+
+    orch.synthesizer.execute = _timed_synth  # type: ignore[method-assign]
+
+    rc = ResearchContext(
+        research_question="Q",
+        topic_summary="S",
+        discipline="psychology",
+    )
+    await orch.execute(rc)
+
+    spans = {name: (s, e) for name, s, e in intervals}
+    assert "checker" in spans and "synthesizer" in spans
+    cs, ce = spans["checker"]
+    ss, se = spans["synthesizer"]
+    # Overlap = max(0, min(end_a, end_b) - max(start_a, start_b))
+    overlap = max(0.0, min(ce, se) - max(cs, ss))
+    assert overlap > SLEEP * 0.5, (
+        f"checker and synthesizer did not overlap: "
+        f"checker=[{cs:.3f},{ce:.3f}] synth=[{ss:.3f},{se:.3f}] overlap={overlap:.3f}s"
+    )
+
+
+@pytest.mark.asyncio
 async def test_thesis_pipeline_auto_saves_session(monkeypatch):
     """Running the thesis pipeline with a session_store auto-saves the session."""
     from core.memory.episodic import EpisodicMemory

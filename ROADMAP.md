@@ -34,7 +34,7 @@ The 1.0 line targets a polished, packaged release on PyPI. The themes:
 - 📋 **Tenacity** retries with exponential jitter on transient provider errors
 - 📋 **pybreaker** circuit breakers per provider (open after N failures, auto-reset)
 - 📋 **Hard budget guard** — pre-call estimation aborts before exceeding `MAX_BUDGET_USD`
-- 📋 **Parallel-safe stages** — researcher + corpus retrieval run via `asyncio.gather`; checker + synthesizer also parallel after the lit map is in
+- ✅ **Parallel-safe stages** — *shipped in 0.1.x*. Phase A (planner ∥ memory ∥ corpus) runs via `asyncio.gather`; literature lanes + RAG queries fan out concurrently; Phase C (checker ∥ synthesizer) runs in parallel after the lit map is in. Regression tests assert each phase actually overlaps in wall-clock time.
 - 📋 Resumable / durable orchestration via Temporal or Prefect (likely 1.x, not 1.0)
 
 ### Extensibility
