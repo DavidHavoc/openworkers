@@ -54,7 +54,7 @@ The 1.0 line targets a polished, packaged release on PyPI. The themes:
 - 📋 Better tool descriptions (example inputs, expected outputs, latency budgets) so LLM clients pick the right tool first time
 
 ### Performance & cost
-- 📋 Redis-backed cache for arXiv/SS/CrossRef searches (24h TTL by default)
+- ✅ Redis-backed cache for arXiv/SS/CrossRef searches (24h TTL by default) — *shipped in 0.1.x*. Opt-in via `cacheable = True` on the tool class; configurable via `SEARCH_CACHE_TTL_SECONDS` and `SEARCH_CACHE_ENABLED` env vars. Soft-fails to no-op if Redis is unreachable.
 - 📋 Diskcache + sqlite for the FastEmbed embedding cache (survives container restarts)
 - 📋 Smart truncation: blackboard-to-prompt compilation deduplicates and ranks entries by relevance before injection
 - 📋 Early termination — supervisor short-circuits the pipeline if the plan is judged unsalvageable
