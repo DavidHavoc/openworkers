@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 from datetime import datetime
@@ -131,46 +132,86 @@ class ThesisOrchestrator:
             },
         )
 
-        # ── Stage 1: HEAD planner ──
-        research_plan: Optional[ResearchPlan] = None
-        if route.activate_head_planner:
+        # ── Phase A: planner ∥ memory ∥ corpus (independent inputs) ──
+        # Planner is a slow LLM call; memory + corpus are I/O-bound Qdrant
+        # reads. Running them concurrently saves ~2 round-trips of latency
+        # since none of the three reads the others' outputs.
+        async def _run_planner() -> Optional[ResearchPlan]:
+            if not route.activate_head_planner:
+                obs_logger.log_event("stage_skipped", session_id, {"stage": "head_planner"})
+                return _build_placeholder_research_plan(research_context.research_question)
             try:
                 result = await self.head.execute(
                     task,
                     {"blackboard_entries": self._get_entries()},
                     mode="planner",
                 )
-                research_plan = result["output"]
                 self._add_entry("agent_output", result)
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "head_planner", "status": "success"}
                 )
+                return result["output"]
             except Exception as e:
                 errors.append(f"head_planner: {e}")
-                research_plan = _build_placeholder_research_plan(research_context.research_question)
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "head_planner", "error": str(e)}
                 )
-        else:
-            research_plan = _build_placeholder_research_plan(research_context.research_question)
-            obs_logger.log_event("stage_skipped", session_id, {"stage": "head_planner"})
+                return _build_placeholder_research_plan(research_context.research_question)
 
-        # ── Stage 2: Memory retrieval ──
-        memory_brief: Optional[MemoryBrief] = None
-        try:
-            memory_brief = self.memory.retrieve_guidance(
-                research_context.research_question, task_type="thesis"
-            )
-            self._add_entry(
-                "memory_guidance",
-                {
-                    "guidance": memory_brief.to_formatted_string(),
-                },
-            )
-            obs_logger.log_memory_hit(session_id, "thesis", memory_brief.similar_past_tasks_count)
-        except Exception as e:
-            errors.append(f"memory_retrieval: {e}")
-            memory_brief = MemoryBrief()
+        async def _run_memory() -> MemoryBrief:
+            try:
+                brief = await asyncio.to_thread(
+                    self.memory.retrieve_guidance,
+                    research_context.research_question,
+                    task_type="thesis",
+                )
+                self._add_entry(
+                    "memory_guidance",
+                    {"guidance": brief.to_formatted_string()},
+                )
+                obs_logger.log_memory_hit(session_id, "thesis", brief.similar_past_tasks_count)
+                return brief
+            except Exception as e:
+                errors.append(f"memory_retrieval: {e}")
+                return MemoryBrief()
+
+        async def _run_corpus() -> None:
+            try:
+                corpus_ctx = await asyncio.to_thread(
+                    self.corpus.analyze,
+                    query=research_context.research_question,
+                    discipline=research_context.discipline,
+                )
+                benchmarks_text = self.corpus.format_benchmarks_for_prompt(
+                    corpus_ctx,
+                    student_wc=len(research_context.topic_summary.split()),
+                )
+                self._add_entry(
+                    "corpus_benchmarks",
+                    {
+                        "benchmarks_text": benchmarks_text,
+                        "thesis_count": (
+                            corpus_ctx.benchmarks.thesis_count if corpus_ctx.benchmarks else 0
+                        ),
+                        "similar_sections": len(corpus_ctx.similar_sections),
+                    },
+                )
+                obs_logger.log_event(
+                    "stage_completed",
+                    session_id,
+                    {"stage": "corpus_retrieval", "status": "success"},
+                )
+            except Exception as e:
+                errors.append(f"corpus_retrieval: {e}")
+                obs_logger.log_event(
+                    "stage_failed", session_id, {"stage": "corpus_retrieval", "error": str(e)}
+                )
+
+        research_plan, memory_brief, _ = await asyncio.gather(
+            _run_planner(),
+            _run_memory(),
+            _run_corpus(),
+        )
 
         # ── Stage 3: Researcher (literature search) ──
         lit_map: Optional[LitMap] = None
@@ -223,88 +264,64 @@ class ThesisOrchestrator:
             lit_map = _build_placeholder_lit_map(research_context.research_question)
             obs_logger.log_event("stage_skipped", session_id, {"stage": "researcher"})
 
-        # ── Stage 4: Checker (citation audit) ──
-        citation_audit: Optional[CitationAudit] = None
-        if route.activate_checker:
+        # ── Phase C: checker ∥ synthesizer (both consume lit_map, neither
+        # consumes the other's output — verified against the prompt
+        # templates: specialist_checker.md uses {task, lit_map, draft_claims,
+        # memory_guidance}; specialist_synthesizer.md uses {task, lit_map,
+        # memory_guidance}). Running them concurrently halves the middle-tier
+        # critical path. ──
+        shared_entries = self._get_entries()
+
+        async def _run_checker() -> CitationAudit:
+            if not route.activate_checker:
+                obs_logger.log_event("stage_skipped", session_id, {"stage": "checker"})
+                return _build_placeholder_citation_audit()
             try:
-                result = await self.checker.execute(
-                    task, {"blackboard_entries": self._get_entries()}
-                )
-                citation_audit = result["output"]
-                self._add_entry("citation_audit", citation_audit.model_dump())
+                result = await self.checker.execute(task, {"blackboard_entries": shared_entries})
+                audit = result["output"]
+                self._add_entry("citation_audit", audit.model_dump())
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "checker", "status": "success"}
                 )
+                return audit
             except Exception as e:
                 errors.append(f"checker: {e}")
-                citation_audit = _build_placeholder_citation_audit()
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "checker", "error": str(e)}
                 )
-        else:
-            citation_audit = _build_placeholder_citation_audit()
-            obs_logger.log_event("stage_skipped", session_id, {"stage": "checker"})
+                return _build_placeholder_citation_audit()
 
-        # ── Stage 5: Synthesizer ──
-        synthesis_report: Optional[SynthesisReport] = None
-        if route.activate_synthesizer:
+        async def _run_synthesizer() -> SynthesisReport:
+            if not route.activate_synthesizer:
+                obs_logger.log_event("stage_skipped", session_id, {"stage": "synthesizer"})
+                return _build_placeholder_synthesis_report(research_context.research_question)
             try:
                 result = await self.synthesizer.execute(
-                    task, {"blackboard_entries": self._get_entries()}
+                    task, {"blackboard_entries": shared_entries}
                 )
-                synthesis_report = result["output"]
+                report = result["output"]
                 self._add_entry(
                     "status",
                     {
                         "entry_type": "synthesis_report",
-                        "content": synthesis_report.model_dump(),
+                        "content": report.model_dump(),
                     },
                 )
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "synthesizer", "status": "success"}
                 )
+                return report
             except Exception as e:
                 errors.append(f"synthesizer: {e}")
-                synthesis_report = _build_placeholder_synthesis_report(
-                    research_context.research_question
-                )
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "synthesizer", "error": str(e)}
                 )
-        else:
-            synthesis_report = _build_placeholder_synthesis_report(
-                research_context.research_question
-            )
-            obs_logger.log_event("stage_skipped", session_id, {"stage": "synthesizer"})
+                return _build_placeholder_synthesis_report(research_context.research_question)
 
-        # ── Stage 5b: Corpus retrieval (before critic) ──
-        try:
-            corpus_ctx = self.corpus.analyze(
-                query=research_context.research_question,
-                discipline=research_context.discipline,
-            )
-            benchmarks_text = self.corpus.format_benchmarks_for_prompt(
-                corpus_ctx,
-                student_wc=len(research_context.topic_summary.split()),
-            )
-            self._add_entry(
-                "corpus_benchmarks",
-                {
-                    "benchmarks_text": benchmarks_text,
-                    "thesis_count": (
-                        corpus_ctx.benchmarks.thesis_count if corpus_ctx.benchmarks else 0
-                    ),
-                    "similar_sections": len(corpus_ctx.similar_sections),
-                },
-            )
-            obs_logger.log_event(
-                "stage_completed", session_id, {"stage": "corpus_retrieval", "status": "success"}
-            )
-        except Exception as e:
-            errors.append(f"corpus_retrieval: {e}")
-            obs_logger.log_event(
-                "stage_failed", session_id, {"stage": "corpus_retrieval", "error": str(e)}
-            )
+        citation_audit, synthesis_report = await asyncio.gather(
+            _run_checker(),
+            _run_synthesizer(),
+        )
 
         # ── Stage 6: Critic ──
         critique: Optional[CritiqueResult] = None
@@ -439,21 +456,40 @@ class ThesisOrchestrator:
         rag_collection: Optional[str] = None,
         session_id: str = "",
     ) -> List[Dict[str, Any]]:
+        """Fan out lane searches and RAG queries in parallel.
+
+        Each lane (arXiv / Semantic Scholar / CrossRef) and each RAG query is
+        an independent network call, so we dispatch them all via
+        ``asyncio.gather`` and collapse their results in a single pass. With
+        N=3 lanes + K RAG queries, end-to-end search latency drops from
+        Σlatency to max(latency).
+        """
         if self.tool_registry is None:
             return []
 
-        all_papers: List[Dict[str, Any]] = []
+        lane_tasks: List[Any] = []
         if plan is not None:
             for lane in plan.search_lanes[: min(len(plan.search_lanes), 3)]:
                 query = lane.get("query", "")
                 source = lane.get("source", "semantic_scholar")
                 if not query:
                     continue
-                papers = await self._search_literature_raw_inner(query, source, limit=10)
-                all_papers.extend(papers)
+                lane_tasks.append(self._search_literature_raw_inner(query, source, limit=10))
 
-        rag_papers = await self._search_rag_for_plan(plan, rag_collection, session_id)
-        all_papers.extend(rag_papers)
+        rag_task = self._search_rag_for_plan(plan, rag_collection, session_id)
+
+        gathered = await asyncio.gather(*lane_tasks, rag_task, return_exceptions=True)
+
+        all_papers: List[Dict[str, Any]] = []
+        for result in gathered:
+            if isinstance(result, Exception):
+                obs_logger.log_event(
+                    "stage_failed",
+                    session_id or "unknown",
+                    {"stage": "lit_search_lane", "error": str(result)},
+                )
+                continue
+            all_papers.extend(result)
         return all_papers
 
     async def _search_rag_for_plan(
@@ -486,11 +522,10 @@ class ThesisOrchestrator:
         if not queries:
             return []
 
-        results: List[Dict[str, Any]] = []
-        for query in queries:
+        async def _query_one(q: str) -> List[Dict[str, Any]]:
             try:
                 out = await tool.execute(
-                    {"query": query, "collection": collection, "limit": 5},
+                    {"query": q, "collection": collection, "limit": 5},
                     "public",
                 )
             except Exception as e:
@@ -500,11 +535,11 @@ class ThesisOrchestrator:
                     {
                         "stage": "rag_search",
                         "collection": collection,
-                        "query": query,
+                        "query": q,
                         "error": str(e),
                     },
                 )
-                continue
+                return []
             if "error" in out:
                 obs_logger.log_event(
                     "stage_failed",
@@ -512,12 +547,17 @@ class ThesisOrchestrator:
                     {
                         "stage": "rag_search",
                         "collection": collection,
-                        "query": query,
+                        "query": q,
                         "error": str(out.get("error", "")),
                     },
                 )
-                continue
-            results.extend(out.get("papers", []))
+                return []
+            return list(out.get("papers", []))
+
+        gathered = await asyncio.gather(*(_query_one(q) for q in queries))
+        results: List[Dict[str, Any]] = []
+        for papers in gathered:
+            results.extend(papers)
         return results
 
     def _deduplicate_papers(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
