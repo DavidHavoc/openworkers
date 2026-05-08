@@ -37,7 +37,7 @@ def _get_cache() -> Any | None:
     if _disk is not None:
         return _disk
     try:
-        import diskcache  # type: ignore[import]
+        import diskcache
     except ImportError:
         logger.debug("diskcache not installed; embedding cache disabled")
         return None
@@ -51,7 +51,7 @@ def _get_cache() -> Any | None:
 
 def _get_model(model_name: str) -> Any:
     if model_name not in _models:
-        from fastembed import TextEmbedding  # type: ignore[import]
+        from fastembed import TextEmbedding
 
         _models[model_name] = TextEmbedding(model_name)
     return _models[model_name]
