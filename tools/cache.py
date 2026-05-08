@@ -28,7 +28,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from typing import Any, Optional
 
 import redis
@@ -59,14 +58,12 @@ class SearchCache:
         ttl_seconds: Optional[int] = None,
         enabled: Optional[bool] = None,
     ) -> None:
-        self.redis_url = redis_url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-        self.ttl = (
-            ttl_seconds
-            if ttl_seconds is not None
-            else int(os.environ.get("SEARCH_CACHE_TTL_SECONDS", str(DEFAULT_TTL_SECONDS)))
-        )
-        env_enabled = os.environ.get("SEARCH_CACHE_ENABLED", "true").lower() != "false"
-        self.enabled = env_enabled if enabled is None else enabled
+        from core.config import get_settings
+
+        settings = get_settings()
+        self.redis_url = redis_url or settings.redis_url
+        self.ttl = ttl_seconds if ttl_seconds is not None else settings.search_cache_ttl_seconds
+        self.enabled = enabled if enabled is not None else settings.search_cache_enabled
         self._client: Optional[redis.Redis] = None
 
     def _get_client(self) -> Optional[redis.Redis]:

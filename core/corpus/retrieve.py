@@ -1,4 +1,3 @@
-import os
 from typing import Any, List
 
 from qdrant_client import QdrantClient
@@ -9,7 +8,9 @@ from core.schemas import CorpusSection, CorpusStats
 
 class CorpusRetrieve:
     def __init__(self, path: str = "./qdrant_data"):
-        qdrant_url = os.environ.get("QDRANT_URL")
+        from core.config import get_settings
+
+        qdrant_url = get_settings().qdrant_url
         if qdrant_url:
             self.client = QdrantClient(url=qdrant_url)
         elif path == ":memory:":

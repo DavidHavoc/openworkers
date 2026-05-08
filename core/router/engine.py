@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -44,14 +43,13 @@ class ThesisRoute:
 
 
 def _read_provider_for_mode(mode: str) -> Tuple[str, str]:
-    key = mode.upper()
-    provider = os.environ.get(f"THESIS_{key}_PROVIDER", "").strip().lower()
-    model = os.environ.get(f"THESIS_{key}_MODEL", "").strip()
+    from core.config import get_settings
+
+    settings = get_settings()
+    provider: str = getattr(settings, f"thesis_{mode}_provider", "").strip().lower()
+    model: str = getattr(settings, f"thesis_{mode}_model", "").strip()
     if not provider:
-        default = _MODE_DEFAULTS.get(mode)
-        if default:
-            return default
-        return ("openai", "gpt-4o-mini")
+        return _MODE_DEFAULTS.get(mode, ("openai", "gpt-4o-mini"))
     if not model:
         model = "unknown"
     return provider, model

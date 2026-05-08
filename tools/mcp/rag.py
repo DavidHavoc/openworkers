@@ -241,7 +241,9 @@ def extract_text(path: str) -> str:
 
 
 def _build_qdrant(qdrant_path: str = "./qdrant_data") -> QdrantClient:
-    qdrant_url = os.environ.get("QDRANT_URL")
+    from core.config import get_settings
+
+    qdrant_url = get_settings().qdrant_url
     if qdrant_url:
         client = QdrantClient(url=qdrant_url)
     elif qdrant_path == ":memory:":
@@ -295,7 +297,7 @@ class RAGIndexer:
         # OCR drift shifts chunk[:64].
         key_base = source_path or source_label
         for idx, chunk in enumerate(chunks):
-            digest = hashlib.md5(f"{key_base}|{idx}".encode("utf-8")).hexdigest()
+            digest = hashlib.md5(f"{key_base}|{idx}".encode()).hexdigest()
             ids.append(str(uuid.UUID(digest)))
             documents.append(chunk)
             metadata.append(

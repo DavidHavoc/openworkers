@@ -1,7 +1,9 @@
 import asyncio
 import logging
 
-logging.basicConfig(level=logging.INFO)
+from core.logging import configure_logging
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

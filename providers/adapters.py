@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 from typing import Any, Dict, Optional
 
 from anthropic import AsyncAnthropic
@@ -12,10 +11,10 @@ from core.schemas import Task
 from providers.interfaces import HeadProvider, MiddleProvider, WorkerProvider
 from providers.unified import UnifiedLLM
 
-_PROVIDER_API_KEY_ENV = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
+_PROVIDER_API_KEY_ATTR = {
+    "anthropic": "anthropic_api_key",
+    "openai": "openai_api_key",
+    "deepseek": "deepseek_api_key",
 }
 
 
@@ -23,10 +22,14 @@ class LLMAdapter:
     """Single-provider backend adapter. Called by UnifiedLLM, not by agents directly."""
 
     def __init__(self, provider: str, default_model: Optional[str] = None):
+        from core.config import get_settings
+
+        settings = get_settings()
         self.provider = provider
-        self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
+        self.dry_run = settings.dry_run
         self.default_model = default_model or "unknown"
-        self.api_key = os.environ.get(_PROVIDER_API_KEY_ENV.get(provider, ""))
+        attr = _PROVIDER_API_KEY_ATTR.get(provider, "")
+        self.api_key: Optional[str] = getattr(settings, attr, "") or None
         self.anthropic_client = None
         self.openai_client = None
 
@@ -184,10 +187,13 @@ def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
 
 
 def _get_available_providers() -> list[str]:
+    from core.config import get_settings
+
+    settings = get_settings()
     available = []
     for prov in ("anthropic", "openai", "deepseek"):
-        key_env = _PROVIDER_API_KEY_ENV.get(prov, "")
-        if os.environ.get(key_env):
+        attr = _PROVIDER_API_KEY_ATTR.get(prov, "")
+        if getattr(settings, attr, ""):
             available.append(prov)
     if not available:
         available = ["anthropic", "openai", "deepseek"]
