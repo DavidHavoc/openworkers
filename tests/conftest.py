@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from core.config import reset_settings
+from core.embedding_cache import reset_embedding_cache
 from providers.resilience import reset_default_registry
 from tools.cache import reset_default_cache
 
@@ -22,7 +23,9 @@ def _reset_singletons() -> None:
     reset_settings(use_env_file=False)
     reset_default_cache()
     reset_default_registry()
+    reset_embedding_cache()
     yield  # type: ignore[misc]
     reset_settings(use_env_file=False)
     reset_default_cache()
     reset_default_registry()
+    reset_embedding_cache()
