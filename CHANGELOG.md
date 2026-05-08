@@ -1,6 +1,15 @@
 # Changelog
 
-All notable changes to OpenWorkers are documented here.
+All notable changes to OpenWorkers are documented here. The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Documentation
+- README rewritten with badges, Mermaid architecture diagram, comparison table, and accurate MCP setup instructions (replaced the hardcoded `/Users/David/...` example path with a placeholder).
+- Clarified Python version support (3.9+ supported, 3.12 used in CI and Docker).
+- CONTRIBUTING.md updated to branch from `main` (the `develop` branch referenced previously did not exist) and to reflect the actual lint/test commands enforced in CI.
+- Added [ROADMAP.md](ROADMAP.md) describing the proposed v1.0 direction (`src/openworkers/` package layout, Ollama provider, RAG over user PDFs, MkDocs site, JSON-RPC 2.0 MCP improvements). All items are explicitly labelled as **proposed**, not shipped.
+- docs/architecture.md polished and cross-linked from README.
 
 ## [0.1.0] — Unreleased
 
@@ -18,7 +27,7 @@ All notable changes to OpenWorkers are documented here.
 - CLI (`thesis research`, `thesis critique`, `thesis verify`, `thesis papers`)
 - MCP server for OpenCode and Claude Code integration
 - Thesis corpus ingestion, analysis, and section retrieval
-- Docker Compose dev environment (API, worker, Postgres, Redis, Qdrant)
+- Docker Compose stack with Redis, Qdrant, a CLI runner service, and an MCP service (gated behind the `tools` profile)
 
 ### Fixed (Phase 1)
 - Router `provider_map` defaults: modes without env vars now fall back to sensible provider/model pairs
