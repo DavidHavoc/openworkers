@@ -2,7 +2,7 @@ import asyncio
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from core.blackboard.engine import Blackboard
 from core.corpus.analyze import CorpusAnalyzer
@@ -136,7 +136,10 @@ class ThesisOrchestrator:
         # Planner is a slow LLM call; memory + corpus are I/O-bound Qdrant
         # reads. Running them concurrently saves ~2 round-trips of latency
         # since none of the three reads the others' outputs.
-        async def _run_planner() -> Optional[ResearchPlan]:
+        # Returns a ``ResearchPlan`` unconditionally — placeholder on skip or
+        # failure — so downstream code can dereference ``research_plan`` without
+        # a None guard.
+        async def _run_planner() -> ResearchPlan:
             if not route.activate_head_planner:
                 obs_logger.log_event("stage_skipped", session_id, {"stage": "head_planner"})
                 return _build_placeholder_research_plan(research_context.research_question)
@@ -150,7 +153,7 @@ class ThesisOrchestrator:
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "head_planner", "status": "success"}
                 )
-                return result["output"]
+                return cast(ResearchPlan, result["output"])
             except Exception as e:
                 errors.append(f"head_planner: {e}")
                 obs_logger.log_event(
@@ -278,7 +281,7 @@ class ThesisOrchestrator:
                 return _build_placeholder_citation_audit()
             try:
                 result = await self.checker.execute(task, {"blackboard_entries": shared_entries})
-                audit = result["output"]
+                audit = cast(CitationAudit, result["output"])
                 self._add_entry("citation_audit", audit.model_dump())
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "checker", "status": "success"}
@@ -299,7 +302,7 @@ class ThesisOrchestrator:
                 result = await self.synthesizer.execute(
                     task, {"blackboard_entries": shared_entries}
                 )
-                report = result["output"]
+                report = cast(SynthesisReport, result["output"])
                 self._add_entry(
                     "status",
                     {
@@ -482,14 +485,14 @@ class ThesisOrchestrator:
 
         all_papers: List[Dict[str, Any]] = []
         for result in gathered:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 obs_logger.log_event(
                     "stage_failed",
                     session_id or "unknown",
                     {"stage": "lit_search_lane", "error": str(result)},
                 )
                 continue
-            all_papers.extend(result)
+            all_papers.extend(cast(List[Dict[str, Any]], result))
         return all_papers
 
     async def _search_rag_for_plan(
