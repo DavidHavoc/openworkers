@@ -5,6 +5,14 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+import pybreaker
+
+from providers.resilience import (
+    ProviderBreakerRegistry,
+    call_with_resilience,
+    get_default_registry,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,10 +107,15 @@ class ProviderHealthCache:
 
 
 class UnifiedLLM:
-    def __init__(self, blackboard: Any = None) -> None:
+    def __init__(
+        self,
+        blackboard: Any = None,
+        breaker_registry: Optional[ProviderBreakerRegistry] = None,
+    ) -> None:
         self.dry_run = os.environ.get("DRY_RUN", "true").lower() == "true"
         self.blackboard = blackboard
         self.health_cache = ProviderHealthCache()
+        self.breakers = breaker_registry or get_default_registry()
         self._session_spend: Dict[str, float] = {}
         self._generate_fn: Optional[Callable[..., Any]] = None
         self._available_providers: List[str] = []
@@ -170,6 +183,11 @@ class UnifiedLLM:
         last_error: Optional[Exception] = None
 
         for provider in order:
+            if self.breakers.is_open(provider):
+                skipped.append(provider)
+                logger.info(f"ROUTE: skipping {provider} (circuit breaker open)")
+                continue
+
             if not self.health_cache.is_healthy(provider):
                 skipped.append(provider)
                 logger.info(f"ROUTE: skipping {provider} (health check failed)")
@@ -186,9 +204,23 @@ class UnifiedLLM:
                 else self._default_model_for(provider)
             )
 
+            # Each per-provider attempt now goes through (breaker → retry).
+            # Transient failures retry inside this call; sustained failure
+            # trips the breaker so subsequent calls in this and future
+            # sessions skip the provider until the reset timeout expires.
+            current_provider = provider
+            current_model = model
+
+            async def _attempt() -> str:
+                return await self._call_provider(
+                    current_provider, current_model, prompt, system_prompt, response_schema
+                )
+
             try:
-                result = await self._call_provider(
-                    provider, model, prompt, system_prompt, response_schema
+                result = await call_with_resilience(
+                    _attempt,
+                    provider=provider,
+                    registry=self.breakers,
                 )
                 elapsed = (time.monotonic() - t0) * 1000
                 cost = self._estimate_cost(result, provider)
@@ -222,6 +254,12 @@ class UnifiedLLM:
                     f"latency={elapsed:.1f}ms cost=${cost:.6f} fallback={fallback}"
                 )
                 return response
+            except pybreaker.CircuitBreakerError as e:
+                last_error = e
+                skipped.append(provider)
+                logger.warning(
+                    f"ROUTE: {provider} short-circuited mid-call for mode={mode}. Falling back."
+                )
             except Exception as e:
                 last_error = e
                 self.health_cache.mark_unhealthy(provider)
