@@ -85,7 +85,11 @@ class ThesisOrchestrator:
         start_time = time.time()
         session_id = str(uuid.uuid4())
         errors: List[str] = []
-        self._active_rag_collection = research_context.rag_collection or None
+        # CR-01: request-scoped state (rag_collection) is threaded through the
+        # call chain rather than stashed on self, so concurrent execute() calls
+        # on a shared orchestrator instance cannot leak collections between
+        # requests.
+        rag_collection = research_context.rag_collection or None
 
         try:
             self.blackboard = Blackboard(session_id=session_id)
@@ -172,7 +176,11 @@ class ThesisOrchestrator:
         lit_map: Optional[LitMap] = None
         if route.activate_researcher:
             try:
-                raw_papers = await self._search_literature_from_plan(research_plan)
+                raw_papers = await self._search_literature_from_plan(
+                    research_plan,
+                    rag_collection=rag_collection,
+                    session_id=session_id,
+                )
                 if raw_papers:
                     deduped = self._deduplicate_papers(raw_papers)
                     self._add_entry(
@@ -426,7 +434,10 @@ class ThesisOrchestrator:
         return session
 
     async def _search_literature_from_plan(
-        self, plan: Optional[ResearchPlan]
+        self,
+        plan: Optional[ResearchPlan],
+        rag_collection: Optional[str] = None,
+        session_id: str = "",
     ) -> List[Dict[str, Any]]:
         if self.tool_registry is None:
             return []
@@ -441,17 +452,26 @@ class ThesisOrchestrator:
                 papers = await self._search_literature_raw_inner(query, source, limit=10)
                 all_papers.extend(papers)
 
-        rag_papers = await self._search_rag_for_plan(plan)
+        rag_papers = await self._search_rag_for_plan(plan, rag_collection, session_id)
         all_papers.extend(rag_papers)
         return all_papers
 
     async def _search_rag_for_plan(
-        self, plan: Optional[ResearchPlan]
+        self,
+        plan: Optional[ResearchPlan],
+        collection: Optional[str],
+        session_id: str = "",
     ) -> List[Dict[str, Any]]:
         """If the active session was started with a rag_collection, pull top-K
         chunks for each subquestion and the main research question.
-        Off entirely when no collection is configured."""
-        collection = getattr(self, "_active_rag_collection", None)
+        Off entirely when no collection is configured.
+
+        Errors are reported via ``obs_logger.log_event("stage_failed", ...)``
+        rather than swallowed, so a corrupted collection / locked Qdrant /
+        broken embedding model does not silently degrade the user's
+        research session to behave as if ``--rag-collection`` was never set
+        (review finding WR-06).
+        """
         if not collection or self.tool_registry is None:
             return []
         tool = self.tool_registry.get_tool("rag_search")
@@ -473,9 +493,29 @@ class ThesisOrchestrator:
                     {"query": query, "collection": collection, "limit": 5},
                     "public",
                 )
-            except Exception:
+            except Exception as e:
+                obs_logger.log_event(
+                    "stage_failed",
+                    session_id or "unknown",
+                    {
+                        "stage": "rag_search",
+                        "collection": collection,
+                        "query": query,
+                        "error": str(e),
+                    },
+                )
                 continue
             if "error" in out:
+                obs_logger.log_event(
+                    "stage_failed",
+                    session_id or "unknown",
+                    {
+                        "stage": "rag_search",
+                        "collection": collection,
+                        "query": query,
+                        "error": str(out.get("error", "")),
+                    },
+                )
                 continue
             results.extend(out.get("papers", []))
         return results

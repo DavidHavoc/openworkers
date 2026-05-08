@@ -14,11 +14,14 @@ Two public surfaces:
 
 Collections are namespaced under ``rag_<name>`` so RAG storage cannot collide
 with the ``thesis_corpus`` (corpus benchmarks) or ``episodes`` (memory)
-collections.
+collections. Names containing characters outside ``[A-Za-z0-9_-]`` are
+disambiguated with a 6-char hash suffix so two distinct user inputs cannot
+collapse to the same backing collection (review finding WR-01).
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -28,17 +31,96 @@ from typing import Any, Dict, List, Optional
 
 from qdrant_client import QdrantClient
 
+from core.embeddings import EMBEDDING_MODEL
 from tools.mcp.engine import MCPTool
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 COLLECTION_PREFIX = "rag_"
+
+SUPPORTED_EXTENSIONS = (".pdf", ".txt", ".md", ".markdown")
+
+# Common abbreviations that should not terminate a sentence. Heuristic — keeps
+# the splitter cheap. Long-form prose with esoteric abbreviations may still
+# undercount, but the chunker is robust to that (see chunk_text WR-02 fix).
+_ABBREV = (
+    "mr",
+    "mrs",
+    "ms",
+    "dr",
+    "prof",
+    "fig",
+    "eq",
+    "no",
+    "vol",
+    "vs",
+    "etc",
+    "i.e",
+    "e.g",
+    "et al",
+    "cf",
+    "approx",
+    "inc",
+    "ltd",
+)
 
 
 def _collection_for(name: str) -> str:
-    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", name).strip("_") or "default"
-    return f"{COLLECTION_PREFIX}{safe}"
+    """Map a user-facing collection name to a backing Qdrant collection name.
+
+    Sanitisation collapses characters outside ``[A-Za-z0-9_-]`` into
+    underscores. To prevent two distinct inputs (e.g. ``../etc/passwd`` vs
+    ``etc/passwd``) collapsing onto the same backing collection — which would
+    let one user's typo wipe another user's data via ``ingest delete`` — any
+    name that required sanitisation is disambiguated with a 6-char hash of
+    the original input. Already-safe names map identically.
+    """
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", name).strip("_")
+    if not safe:
+        return f"{COLLECTION_PREFIX}default"
+    if safe == name:
+        return f"{COLLECTION_PREFIX}{safe}"
+    suffix = hashlib.md5(name.encode("utf-8")).hexdigest()[:6]
+    return f"{COLLECTION_PREFIX}{safe}_{suffix}"
+
+
+def _is_sentence_terminator(words_so_far: List[str]) -> bool:
+    """True if the last word in ``words_so_far`` is a real sentence ender.
+
+    Skips terminators that look like abbreviations (``Dr.``, ``i.e.``, etc.).
+    """
+    if not words_so_far:
+        return False
+    last = words_so_far[-1].rstrip(")]\"'").lower()
+    if not last or last[-1] not in ".!?":
+        return False
+    stem = last.rstrip(".!?")
+    return stem not in _ABBREV
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Sentence-split with light abbreviation handling.
+
+    Splits on ``.!?`` followed by whitespace, then re-glues fragments where
+    the previous fragment ends with a known abbreviation.
+    """
+    raw = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if not raw:
+        return []
+
+    merged: List[str] = []
+    for piece in raw:
+        if merged and _ends_with_abbrev(merged[-1]):
+            merged[-1] = merged[-1] + " " + piece
+        else:
+            merged.append(piece)
+    return merged
+
+
+def _ends_with_abbrev(sentence: str) -> bool:
+    last = sentence.split()[-1] if sentence.split() else ""
+    stem = last.rstrip(".!?").lower()
+    return stem in _ABBREV
 
 
 def chunk_text(
@@ -48,10 +130,14 @@ def chunk_text(
 ) -> List[str]:
     """Sentence-aware fixed-size chunking with word overlap.
 
-    Splits on ``.!?`` boundaries, then packs sentences into chunks up to
-    ``max_words`` long. The next chunk replays the last ``overlap_words``
-    words from the previous one so retrieval near chunk boundaries still
-    surfaces the right context.
+    Splits on ``.!?`` boundaries (with abbreviation guards), then packs
+    sentences into chunks up to ``max_words`` long. The next chunk replays
+    the last ``overlap_words`` words from the previous one so retrieval near
+    chunk boundaries still surfaces the right context.
+
+    A single sentence longer than ``max_words`` (common in PDF exports of
+    bibliographies and equations) is hard-split into word-windows of
+    ``max_words`` rather than allowed to balloon a single chunk arbitrarily.
     """
     if not text or not text.strip():
         return []
@@ -60,50 +146,85 @@ def chunk_text(
     if overlap_words < 0 or overlap_words >= max_words:
         raise ValueError("overlap_words must satisfy 0 <= overlap < max_words")
 
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    sentences = _split_sentences(text)
     if not sentences:
         return []
 
+    step = max_words - overlap_words
+
     chunks: List[str] = []
-    buf: List[str] = []
+    buf: List[str] = []  # current chunk's sentences
     buf_words = 0
+    carry: List[str] = []  # words to prepend to the next chunk (true overlap)
+
+    def flush() -> None:
+        nonlocal buf, buf_words, carry
+        if not buf:
+            return
+        if carry:
+            chunk = " ".join(carry) + " " + " ".join(buf)
+        else:
+            chunk = " ".join(buf)
+        chunks.append(chunk)
+        # Carry forward only from the freshly-finalised buf, never from
+        # previous carries — prevents the overlap cascade flagged in WR-04.
+        flat = " ".join(buf).split()
+        carry = flat[-overlap_words:] if overlap_words and flat else []
+        buf = []
+        buf_words = 0
 
     for sentence in sentences:
         words = sentence.split()
         if not words:
             continue
-        if buf_words + len(words) > max_words and buf:
-            chunks.append(" ".join(buf))
-            if overlap_words:
-                tail_words: List[str] = []
-                for prev in reversed(buf):
-                    tail_words = prev.split() + tail_words
-                    if len(tail_words) >= overlap_words:
-                        break
-                tail = " ".join(tail_words[-overlap_words:])
-                buf = [tail] if tail else []
-                buf_words = len(buf[0].split()) if buf else 0
-            else:
-                buf = []
-                buf_words = 0
+
+        # WR-02: hard-split a single oversized sentence into word-windows so
+        # no chunk exceeds max_words.
+        if len(words) > max_words:
+            flush()
+            for i in range(0, len(words), step):
+                window = words[i : i + max_words]
+                if not window:
+                    continue
+                if carry:
+                    chunks.append(" ".join(carry) + " " + " ".join(window))
+                else:
+                    chunks.append(" ".join(window))
+                carry = window[-overlap_words:] if overlap_words else []
+            continue
+
+        if buf_words + len(words) > max_words:
+            flush()
+
         buf.append(sentence)
         buf_words += len(words)
 
-    if buf:
-        chunks.append(" ".join(buf))
+    flush()
     return chunks
 
 
 def extract_text(path: str) -> str:
-    """Pull plain text from a PDF or text/markdown file.
+    """Pull plain text from a supported file.
 
-    PDF extraction uses PyMuPDF (already a project dependency). For .txt and
-    .md we just read the file and strip BOMs.
+    Supported extensions are listed in ``SUPPORTED_EXTENSIONS``. Other types
+    (``.docx``, ``.exe``, images, archives) raise ``ValueError`` to prevent
+    the caller from silently embedding garbage extracted from binary content
+    via ``errors="ignore"`` (review finding WR-05).
+
+    Text files are decoded with ``utf-8-sig`` so any UTF-8 BOM is stripped
+    during decode rather than via a fragile post-hoc ``lstrip`` on the
+    codepoint U+FEFF (review finding WR-03).
     """
     if not os.path.exists(path):
         raise FileNotFoundError(path)
 
     ext = os.path.splitext(path)[1].lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise ValueError(
+            f"Unsupported file type: {ext!r}. "
+            f"Supported: {sorted(SUPPORTED_EXTENSIONS)}"
+        )
+
     if ext == ".pdf":
         try:
             import fitz  # PyMuPDF
@@ -117,8 +238,8 @@ def extract_text(path: str) -> str:
         finally:
             doc.close()
 
-    with open(path, encoding="utf-8", errors="ignore") as f:
-        return f.read().lstrip("﻿")
+    with open(path, encoding="utf-8-sig", errors="ignore") as f:
+        return f.read()
 
 
 def _build_qdrant(qdrant_path: str = "./qdrant_data") -> QdrantClient:
@@ -170,10 +291,13 @@ class RAGIndexer:
         ids: List[str] = []
         documents: List[str] = []
         metadata: List[Dict[str, Any]] = []
+        # IN-03: id derivation no longer includes a chunk-content prefix, so
+        # re-ingesting a byte-identical file truly overwrites the existing
+        # points instead of inserting near-duplicates whenever whitespace or
+        # OCR drift shifts chunk[:64].
+        key_base = source_path or source_label
         for idx, chunk in enumerate(chunks):
-            digest = hashlib.md5(
-                f"{source_path or source_label}|{idx}|{chunk[:64]}".encode()
-            ).hexdigest()
+            digest = hashlib.md5(f"{key_base}|{idx}".encode("utf-8")).hexdigest()
             ids.append(str(uuid.UUID(digest)))
             documents.append(chunk)
             metadata.append(
@@ -233,6 +357,10 @@ class RAGSearchTool(MCPTool):
     Returns ``{"papers": [...]}`` shaped exactly like the academic tools so the
     orchestrator's existing ``_search_literature_from_plan`` /
     ``_deduplicate_papers`` pipeline can consume the output unchanged.
+
+    The synchronous ``QdrantClient.query`` call (FastEmbed embedding +
+    RocksDB read) is dispatched via ``asyncio.to_thread`` so it does not
+    starve the event loop under the API server (review finding IN-06).
     """
 
     name = "rag_search"
@@ -306,7 +434,8 @@ class RAGSearchTool(MCPTool):
             return {"papers": [], "total_results": 0}
 
         try:
-            results = client.query(
+            results = await asyncio.to_thread(
+                client.query,
                 collection_name=coll,
                 query_text=query,
                 limit=limit,
