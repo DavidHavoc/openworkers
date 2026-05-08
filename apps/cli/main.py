@@ -355,9 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_corpus.add_argument("--year", type=int, default=0, help="Year of publication")
     add_output_args(p_corpus)
 
-    p_ingest = sub.add_parser(
-        "ingest", help="Manage user RAG collections (PDF/text -> Qdrant)"
-    )
+    p_ingest = sub.add_parser("ingest", help="Manage user RAG collections (PDF/text -> Qdrant)")
     ingest_sub = p_ingest.add_subparsers(dest="ingest_action", required=True)
 
     p_ingest_add = ingest_sub.add_parser("add", help="Add a PDF or text file to a RAG collection")

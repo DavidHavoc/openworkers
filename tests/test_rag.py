@@ -37,7 +37,9 @@ def test_chunk_text_empty_input():
 
 
 def test_chunk_text_single_chunk_for_short_text():
-    text = "Photonic computing aims to replace electrons with photons. It promises lower energy use."
+    text = (
+        "Photonic computing aims to replace electrons with photons. It promises lower energy use."
+    )
     chunks = chunk_text(text, max_words=300, overlap_words=50)
     assert len(chunks) == 1
     assert "Photonic" in chunks[0]
@@ -55,9 +57,9 @@ def test_chunk_text_splits_at_max_words_with_sentence_boundary():
     assert len(chunks) > 1
     for chunk in chunks[:-1]:
         stripped = chunk.rstrip()
-        assert stripped.endswith((".", "!", "?")), (
-            f"chunk did not end at sentence boundary: {stripped[-30:]!r}"
-        )
+        assert stripped.endswith(
+            (".", "!", "?")
+        ), f"chunk did not end at sentence boundary: {stripped[-30:]!r}"
 
 
 def test_chunk_text_oversized_sentence_is_hard_split(capsys):
@@ -70,9 +72,9 @@ def test_chunk_text_oversized_sentence_is_hard_split(capsys):
     chunks = chunk_text(long_sentence, max_words=100, overlap_words=20)
     assert len(chunks) > 1
     for chunk in chunks:
-        assert len(chunk.split()) <= 100, (
-            f"chunk exceeded max_words cap: {len(chunk.split())} words"
-        )
+        assert (
+            len(chunk.split()) <= 100
+        ), f"chunk exceeded max_words cap: {len(chunk.split())} words"
 
 
 def test_chunk_text_overlap_replays_exact_tail():
@@ -82,18 +84,16 @@ def test_chunk_text_overlap_replays_exact_tail():
     deleted entirely (review finding WR-07). Uses distinguishable tokens so
     accidental cyclic collisions can't satisfy the assertion.
     """
-    sentences = [
-        f"alpha{i:03d} beta{i:03d} gamma{i:03d} delta{i:03d}." for i in range(40)
-    ]
+    sentences = [f"alpha{i:03d} beta{i:03d} gamma{i:03d} delta{i:03d}." for i in range(40)]
     text = " ".join(sentences)
     chunks = chunk_text(text, max_words=20, overlap_words=5)
     assert len(chunks) >= 2
     for prev, nxt in zip(chunks, chunks[1:]):
         prev_tail = prev.split()[-5:]
         nxt_head = nxt.split()[:5]
-        assert nxt_head == prev_tail, (
-            f"overlap broken: prev_tail={prev_tail!r} nxt_head={nxt_head!r}"
-        )
+        assert (
+            nxt_head == prev_tail
+        ), f"overlap broken: prev_tail={prev_tail!r} nxt_head={nxt_head!r}"
 
 
 def test_chunk_text_overlap_does_not_cascade():
@@ -103,9 +103,7 @@ def test_chunk_text_overlap_does_not_cascade():
     re-fed the carried tail back into the buffer, so words from chunk N could
     appear in chunk N+2 when sentences were short.
     """
-    sentences = [
-        f"sentinel{i:03d} marker{i:03d} token{i:03d}." for i in range(60)
-    ]
+    sentences = [f"sentinel{i:03d} marker{i:03d} token{i:03d}." for i in range(60)]
     text = " ".join(sentences)
     chunks = chunk_text(text, max_words=12, overlap_words=3)
     assert len(chunks) >= 3
@@ -118,8 +116,7 @@ def test_chunk_text_overlap_does_not_cascade():
         sentinels_in_n = {w for w in chunk_n_words if w.startswith("sentinel")}
         sentinels_in_n2 = {w for w in chunk_n2_words if w.startswith("sentinel")}
         assert sentinels_in_n.isdisjoint(sentinels_in_n2), (
-            f"chunk {n} sentinels leaked into chunk {n + 2}: "
-            f"{sentinels_in_n & sentinels_in_n2}"
+            f"chunk {n} sentinels leaked into chunk {n + 2}: " f"{sentinels_in_n & sentinels_in_n2}"
         )
 
 
@@ -285,9 +282,7 @@ def test_search_returns_empty_for_unknown_collection(in_memory_client):
     tool = RAGSearchTool(client=in_memory_client)
     import asyncio
 
-    out = asyncio.run(
-        tool.execute({"query": "anything", "collection": "never_ingested"}, "public")
-    )
+    out = asyncio.run(tool.execute({"query": "anything", "collection": "never_ingested"}, "public"))
     assert out == {"papers": [], "total_results": 0}
 
 
@@ -343,6 +338,6 @@ def test_re_ingest_does_not_grow_collection(tmp_path, in_memory_client):
     assert n1 == n2 >= 1
     # The actual dedup property — same source path, same chunk indices,
     # same point IDs, so the second ingest overwrites in place.
-    assert count_after_first == count_after_second, (
-        f"collection grew on re-ingest: {count_after_first} -> {count_after_second}"
-    )
+    assert (
+        count_after_first == count_after_second
+    ), f"collection grew on re-ingest: {count_after_first} -> {count_after_second}"
