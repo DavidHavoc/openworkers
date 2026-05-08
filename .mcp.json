@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "openworkers": {
+      "command": "uv",
+      "args": ["run", "thesis-mcp"],
+      "env": {
+        "DRY_RUN": "false",
+        "THESIS_QUALITY_PROVIDER": "anthropic",
+        "THESIS_QUALITY_MODEL": "claude-opus-4-5",
+        "THESIS_BALANCED_PROVIDER": "anthropic",
+        "THESIS_BALANCED_MODEL": "claude-sonnet-4-6",
+        "THESIS_CHEAP_PROVIDER": "anthropic",
+        "THESIS_CHEAP_MODEL": "claude-haiku-4-5-20251001"
+      }
+    }
+  }
+}
