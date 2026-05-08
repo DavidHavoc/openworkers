@@ -1,4 +1,5 @@
 import fakeredis
+import fakeredis.aioredis
 import pytest
 
 from core.blackboard.engine import Blackboard
@@ -15,6 +16,11 @@ def mock_redis(monkeypatch):
     monkeypatch.setattr(
         "redis.from_url",
         lambda *args, **kwargs: fakeredis.FakeRedis(server=server, decode_responses=True),
+    )
+    # Mock redis.asyncio.from_url to return an async FakeRedis instance
+    monkeypatch.setattr(
+        "redis.asyncio.from_url",
+        lambda *args, **kwargs: fakeredis.aioredis.FakeRedis(server=server, decode_responses=True),
     )
 
 
@@ -307,7 +313,7 @@ async def test_session_store_list_and_count():
     from core.sessions.store import RedisSessionStore
 
     store = RedisSessionStore()
-    store.clear_all()
+    await store.clear_all()
 
     for i in range(3):
         session = ResearchSession(
