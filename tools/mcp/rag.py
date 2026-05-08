@@ -84,19 +84,6 @@ def _collection_for(name: str) -> str:
     return f"{COLLECTION_PREFIX}{safe}_{suffix}"
 
 
-def _is_sentence_terminator(words_so_far: list[str]) -> bool:
-    """True if the last word in ``words_so_far`` is a real sentence ender.
-
-    Skips terminators that look like abbreviations (``Dr.``, ``i.e.``, etc.).
-    """
-    if not words_so_far:
-        return False
-    last = words_so_far[-1].rstrip(")]\"'").lower()
-    if not last or last[-1] not in ".!?":
-        return False
-    stem = last.rstrip(".!?")
-    return stem not in _ABBREV
-
 
 def _split_sentences(text: str) -> list[str]:
     """Sentence-split with light abbreviation handling.
