@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import redis
@@ -44,7 +44,7 @@ class Blackboard:
             entry_type=entry_type,
             content=content,
             metadata=metadata or {},
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
         # Store in Redis as JSON string under session-specific key

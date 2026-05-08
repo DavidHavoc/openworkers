@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 logger = logging.getLogger(__name__)
@@ -401,7 +401,7 @@ class ThesisOrchestrator:
             citation_audit=citation_audit,
             synthesis_report=synthesis_report,
             critique=final_critique,
-            created_at=datetime.utcnow().isoformat() + "Z",
+            created_at=datetime.now(timezone.utc).isoformat(),
             status="complete" if not errors else "partial",
         )
 
@@ -412,7 +412,7 @@ class ThesisOrchestrator:
             worker_agents = [a for a in agent_agents if a == "researcher"]
             episode = MemoryEpisode(
                 episode_id=str(uuid.uuid4()),
-                timestamp=datetime.utcnow().isoformat() + "Z",
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 task_summary=research_context.research_question,
                 task_type="thesis",
                 privacy_tier="public",
@@ -656,7 +656,7 @@ class ThesisOrchestrator:
                 entry_type="task",
                 content=task.model_dump(),
                 metadata={},
-                timestamp=datetime.utcnow().isoformat() + "Z",
+                timestamp=datetime.now(timezone.utc).isoformat(),
             ),
         ]
 
