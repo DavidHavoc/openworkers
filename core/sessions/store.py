@@ -1,4 +1,3 @@
-import os
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -8,7 +7,6 @@ import redis
 
 from core.schemas import ResearchSession
 
-_SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", str(30 * 24 * 3600)))
 _SESSION_KEY_PREFIX = "session:"
 _INDEX_KEY = "sessions:index"
 
@@ -40,14 +38,18 @@ class BaseSessionStore(ABC):
 
 class RedisSessionStore(BaseSessionStore):
     def __init__(self, redis_url: Optional[str] = None) -> None:
-        url = redis_url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        from core.config import get_settings
+
+        url = redis_url or get_settings().redis_url
         self.redis = redis.from_url(url, decode_responses=True)
 
     async def save(self, session: ResearchSession) -> None:
         session_key = f"{_SESSION_KEY_PREFIX}{session.session_id}"
         data = session.model_dump_json()
         pipe = self.redis.pipeline()
-        pipe.setex(session_key, _SESSION_TTL_SECONDS, data)
+        from core.config import get_settings
+
+        pipe.setex(session_key, get_settings().session_ttl_seconds, data)
         pipe.zadd(_INDEX_KEY, {session.session_id: time.time()})
         pipe.execute()
 
@@ -104,7 +106,9 @@ class RedisSessionStore(BaseSessionStore):
 
 class PgSessionStore(BaseSessionStore):
     def __init__(self, dsn: Optional[str] = None) -> None:
-        self._dsn = dsn or os.environ.get("DATABASE_URL", "")
+        from core.config import get_settings
+
+        self._dsn = dsn or get_settings().database_url
         self._pool: Any = None
 
     async def _get_pool(self) -> Any:
@@ -219,8 +223,11 @@ class PgSessionStore(BaseSessionStore):
 
 
 def create_session_store() -> BaseSessionStore:
-    backend = os.environ.get("SESSION_BACKEND", "").lower()
-    db_url = os.environ.get("DATABASE_URL", "")
+    from core.config import get_settings
+
+    settings = get_settings()
+    backend = settings.session_backend.lower()
+    db_url = settings.database_url
     if backend == "postgres" or (not backend and db_url):
         return PgSessionStore()
     return RedisSessionStore()

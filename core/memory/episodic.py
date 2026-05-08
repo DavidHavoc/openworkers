@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 from qdrant_client import QdrantClient
@@ -14,7 +13,9 @@ class EpisodicMemory:
     """
 
     def __init__(self, qdrant_location: Optional[str] = None):
-        qdrant_url = os.environ.get("QDRANT_URL")
+        from core.config import get_settings
+
+        qdrant_url = get_settings().qdrant_url
         if qdrant_url:
             self.client = QdrantClient(url=qdrant_url)
         elif qdrant_location:

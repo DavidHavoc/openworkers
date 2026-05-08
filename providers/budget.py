@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import contextvars
 import logging
-import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -57,28 +56,6 @@ class BudgetExceededError(RuntimeError):
     """
 
 
-def _env_float(name: str) -> Optional[float]:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        logger.warning("BUDGET: ignoring non-numeric %s=%r", name, raw)
-        return None
-
-
-def _output_floor() -> int:
-    raw = os.environ.get("BUDGET_OUTPUT_TOKEN_FLOOR", "").strip()
-    if not raw:
-        return 500
-    try:
-        n = int(raw)
-        return max(0, n)
-    except ValueError:
-        return 500
-
-
 class BudgetGuard:
     """Tracks running spend and refuses calls that would exceed a per-session cap.
 
@@ -106,13 +83,17 @@ class BudgetGuard:
         max_usd: Optional[float] = None,
         output_token_floor: Optional[int] = None,
     ) -> None:
-        env_cap = _env_float("MAX_BUDGET_USD")
-        self.max_usd = max_usd if max_usd is not None else env_cap
+        from core.config import get_settings
+
+        settings = get_settings()
+        self.max_usd = max_usd if max_usd is not None else settings.max_budget_usd
         self.output_token_floor = (
-            output_token_floor if output_token_floor is not None else _output_floor()
+            output_token_floor
+            if output_token_floor is not None
+            else settings.budget_output_token_floor
         )
         self.spent_usd = 0.0
-        self._token: Optional[contextvars.Token[Optional["BudgetGuard"]]] = None
+        self._token: Optional[contextvars.Token[Optional[BudgetGuard]]] = None
 
     @property
     def enabled(self) -> bool:
@@ -178,7 +159,7 @@ class BudgetGuard:
 
     # ── contextvars plumbing ────────────────────────────────────────────
 
-    def __enter__(self) -> "BudgetGuard":
+    def __enter__(self) -> BudgetGuard:
         self._token = _current_guard.set(self)
         return self
 

@@ -28,9 +28,9 @@ Configuration
 from __future__ import annotations
 
 import logging
-import os
+from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 import pybreaker
@@ -87,26 +87,6 @@ def is_transient_error(exc: BaseException) -> bool:
 # ── tenacity retry helper ────────────────────────────────────────────────
 
 
-def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
 async def call_with_retry(
     fn: Callable[[], Awaitable[Any]],
     *,
@@ -121,9 +101,12 @@ async def call_with_retry(
     rather than the ``@retry`` decorator so the retry policy can be
     swapped per-call without rebuilding closures.
     """
-    attempts = attempts if attempts is not None else _env_int("RESILIENCE_RETRY_ATTEMPTS", 3)
-    base = base if base is not None else _env_float("RESILIENCE_RETRY_BASE_SEC", 0.5)
-    cap = cap if cap is not None else _env_float("RESILIENCE_RETRY_MAX_SEC", 8.0)
+    from core.config import get_settings
+
+    settings = get_settings()
+    attempts = attempts if attempts is not None else settings.resilience_retry_attempts
+    base = base if base is not None else settings.resilience_retry_base_sec
+    cap = cap if cap is not None else settings.resilience_retry_max_sec
 
     retryer = AsyncRetrying(
         stop=stop_after_attempt(max(1, attempts)),
@@ -189,13 +172,14 @@ class ProviderBreakerRegistry:
         fail_max: Optional[int] = None,
         reset_timeout_sec: Optional[int] = None,
     ) -> None:
-        self.fail_max = (
-            fail_max if fail_max is not None else _env_int("RESILIENCE_BREAKER_FAIL_MAX", 5)
-        )
+        from core.config import get_settings
+
+        settings = get_settings()
+        self.fail_max = fail_max if fail_max is not None else settings.resilience_breaker_fail_max
         self.reset_timeout = (
             reset_timeout_sec
             if reset_timeout_sec is not None
-            else _env_int("RESILIENCE_BREAKER_RESET_SEC", 60)
+            else settings.resilience_breaker_reset_sec
         )
         self._breakers: dict[str, pybreaker.CircuitBreaker] = {}
 
