@@ -162,9 +162,8 @@ class Router:
             reasons.append("full pipeline: all agents")
 
             if budget_tight:
+                route.activate_synthesizer = False
                 reasons.append("budget tight: synthesizer skipped")
-                if route.activate_synthesizer:
-                    route.activate_synthesizer = False
 
         elif phase == "search_only":
             route.activate_head_planner = True
