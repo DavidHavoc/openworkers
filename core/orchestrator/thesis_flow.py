@@ -85,6 +85,7 @@ class ThesisOrchestrator:
         start_time = time.time()
         session_id = str(uuid.uuid4())
         errors: List[str] = []
+        self._active_rag_collection = research_context.rag_collection or None
 
         try:
             self.blackboard = Blackboard(session_id=session_id)
@@ -427,20 +428,57 @@ class ThesisOrchestrator:
     async def _search_literature_from_plan(
         self, plan: Optional[ResearchPlan]
     ) -> List[Dict[str, Any]]:
-        if plan is None or not plan.search_lanes:
-            return []
         if self.tool_registry is None:
             return []
 
         all_papers: List[Dict[str, Any]] = []
-        for lane in plan.search_lanes[: min(len(plan.search_lanes), 3)]:
-            query = lane.get("query", "")
-            source = lane.get("source", "semantic_scholar")
-            if not query:
-                continue
-            papers = await self._search_literature_raw_inner(query, source, limit=10)
-            all_papers.extend(papers)
+        if plan is not None:
+            for lane in plan.search_lanes[: min(len(plan.search_lanes), 3)]:
+                query = lane.get("query", "")
+                source = lane.get("source", "semantic_scholar")
+                if not query:
+                    continue
+                papers = await self._search_literature_raw_inner(query, source, limit=10)
+                all_papers.extend(papers)
+
+        rag_papers = await self._search_rag_for_plan(plan)
+        all_papers.extend(rag_papers)
         return all_papers
+
+    async def _search_rag_for_plan(
+        self, plan: Optional[ResearchPlan]
+    ) -> List[Dict[str, Any]]:
+        """If the active session was started with a rag_collection, pull top-K
+        chunks for each subquestion and the main research question.
+        Off entirely when no collection is configured."""
+        collection = getattr(self, "_active_rag_collection", None)
+        if not collection or self.tool_registry is None:
+            return []
+        tool = self.tool_registry.get_tool("rag_search")
+        if tool is None:
+            return []
+
+        queries: List[str] = []
+        if plan is not None:
+            if plan.research_question:
+                queries.append(plan.research_question)
+            queries.extend(q for q in plan.subquestions[:3] if q)
+        if not queries:
+            return []
+
+        results: List[Dict[str, Any]] = []
+        for query in queries:
+            try:
+                out = await tool.execute(
+                    {"query": query, "collection": collection, "limit": 5},
+                    "public",
+                )
+            except Exception:
+                continue
+            if "error" in out:
+                continue
+            results.extend(out.get("papers", []))
+        return results
 
     def _deduplicate_papers(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen: set[str] = set()
