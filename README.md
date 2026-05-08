@@ -29,6 +29,7 @@ A multi-agent thesis assistant that searches real literature, audits citations, 
 | 13 | **MCP Server** | Four tools over stdio for Claude Code, OpenCode, and any MCP-aware client |
 | 14 | **Evaluation Harness** | Built-in tests for routing correctness, search recall, fake-DOI detection |
 | 15 | **Dockerized** | Compose stack with Redis, Qdrant, CLI runner, and MCP service |
+| 16 | **User RAG over PDFs** | `thesis ingest add paper.pdf --collection my_papers` chunks + embeds; researcher transparently retrieves alongside arXiv/SS via `thesis research ... --rag-collection my_papers` |
 
 ## Architecture
 
@@ -108,10 +109,13 @@ docker compose run --rm cli python -m apps.cli.main research "your question"
 
 ```bash
 thesis research "Can light replace electrons in CPUs?" --discipline computer_science
+thesis research "..." --rag-collection my_papers   # also retrieve from your own PDFs
 thesis critique "Social media causes depression because teens spend too much time online"
 thesis verify "10.1038/nature14539"
 thesis papers "transformer attention" --source arxiv --limit 5
 thesis corpus ingest thesis.pdf --title "My Thesis" --discipline cs --year 2024
+thesis ingest add paper.pdf --collection my_papers   # add to your RAG corpus
+thesis ingest list
 thesis sessions
 thesis resume <session-id>
 ```

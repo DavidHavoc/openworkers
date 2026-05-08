@@ -50,6 +50,7 @@ async def cmd_research(args):
         discipline=args.discipline,
         existing_knowledge=args.knowledge or "",
         what_they_need=args.need or "",
+        rag_collection=getattr(args, "rag_collection", None) or None,
     )
     session = await orch.execute(rc)
     if args.format == "json":
@@ -196,6 +197,56 @@ async def cmd_corpus(args):
     return summary
 
 
+async def cmd_ingest(args):
+    from tools.mcp.rag import RAGIndexer
+
+    indexer = RAGIndexer()
+
+    if args.ingest_action == "list":
+        names = indexer.list_collections()
+        if args.format == "json":
+            _output({"collections": names}, "json", args.output)
+        else:
+            if not names:
+                print("No RAG collections.")
+            else:
+                print("RAG collections:")
+                for n in names:
+                    print(f"  {n}")
+        return names
+
+    if args.ingest_action == "delete":
+        deleted = indexer.delete_collection(args.collection)
+        summary = {"collection": args.collection, "deleted": deleted}
+        if args.format == "json":
+            _output(summary, "json", args.output)
+        else:
+            print(f"{'Deleted' if deleted else 'Not found'}: {args.collection}")
+        return summary
+
+    # add
+    chunks = indexer.ingest_file(
+        path=args.path,
+        collection=args.collection,
+        title=args.title or os.path.basename(args.path),
+        max_words=args.max_words,
+        overlap_words=args.overlap,
+    )
+    summary = {
+        "status": "ingested",
+        "path": args.path,
+        "collection": args.collection,
+        "chunks": chunks,
+    }
+    if args.format == "json":
+        _output(summary, "json", args.output)
+    else:
+        print(f"Ingested: {args.path}")
+        print(f"  Collection: {args.collection}")
+        print(f"  Chunks: {chunks}")
+    return summary
+
+
 def add_output_args(p):
     p.add_argument("--format", choices=["text", "json"], default="text", help="Output format")
     p.add_argument("--output", type=str, default=None, help="Save output to file")
@@ -217,6 +268,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_research.add_argument("--knowledge", type=str, default="", help="What you already know")
     p_research.add_argument("--need", type=str, default="", help="What you need help with")
+    p_research.add_argument(
+        "--rag-collection",
+        dest="rag_collection",
+        type=str,
+        default=None,
+        help="Pull additional context from a user RAG collection (see `thesis ingest`)",
+    )
     add_output_args(p_research)
 
     p_critique = sub.add_parser("critique", help="Critique an idea, claim, or draft section")
@@ -256,6 +314,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_corpus.add_argument("--year", type=int, default=0, help="Year of publication")
     add_output_args(p_corpus)
 
+    p_ingest = sub.add_parser(
+        "ingest", help="Manage user RAG collections (PDF/text -> Qdrant)"
+    )
+    ingest_sub = p_ingest.add_subparsers(dest="ingest_action", required=True)
+
+    p_ingest_add = ingest_sub.add_parser("add", help="Add a PDF or text file to a RAG collection")
+    p_ingest_add.add_argument("path", type=str, help="Path to PDF, .txt, or .md file")
+    p_ingest_add.add_argument(
+        "--collection", "-c", type=str, default="default", help="Collection name"
+    )
+    p_ingest_add.add_argument("--title", type=str, default="", help="Display label for the source")
+    p_ingest_add.add_argument(
+        "--max-words", dest="max_words", type=int, default=300, help="Max words per chunk"
+    )
+    p_ingest_add.add_argument(
+        "--overlap", type=int, default=50, help="Word overlap between adjacent chunks"
+    )
+    add_output_args(p_ingest_add)
+
+    p_ingest_list = ingest_sub.add_parser("list", help="List user RAG collections")
+    add_output_args(p_ingest_list)
+
+    p_ingest_delete = ingest_sub.add_parser("delete", help="Delete a user RAG collection")
+    p_ingest_delete.add_argument("collection", type=str, help="Collection name")
+    add_output_args(p_ingest_delete)
+
     return parser
 
 
@@ -271,6 +355,7 @@ def main():
         "resume": cmd_resume,
         "sessions": cmd_sessions,
         "corpus": cmd_corpus,
+        "ingest": cmd_ingest,
     }
 
     handler = command_map.get(args.command)
