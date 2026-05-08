@@ -3,6 +3,7 @@ from typing import Optional
 
 from qdrant_client import QdrantClient
 
+from core.embeddings import EMBEDDING_MODEL
 from core.schemas import MemoryBrief, MemoryEpisode
 
 
@@ -23,8 +24,7 @@ class EpisodicMemory:
 
         self.collection_name = "episodes"
 
-        # fastembed model
-        self.client.set_model("BAAI/bge-small-en-v1.5")
+        self.client.set_model(EMBEDDING_MODEL)
 
         if not self.client.collection_exists(collection_name=self.collection_name):
             self.client.create_collection(
