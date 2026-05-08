@@ -4,6 +4,9 @@ All notable changes to OpenWorkers are documented here. The format is loosely ba
 
 ## [Unreleased]
 
+### Added
+- **RAG over user PDFs** (first incremental v1.0 slice). New `tools/mcp/rag.py` with sentence-aware chunker, `RAGIndexer` (PDF/text → Qdrant via PyMuPDF + FastEmbed `BAAI/bge-small-en-v1.5`), and `RAGSearchTool` (registered as `rag_search` in `ToolRegistry`). Collections namespaced under `rag_*` so they cannot collide with `thesis_corpus` or `episodes`. New CLI: `thesis ingest add|list|delete`. New flag: `thesis research ... --rag-collection <name>` makes the researcher pull from the user collection alongside arXiv/SS. New field: `ResearchContext.rag_collection`. `tests/test_rag.py` covers chunking edge cases, BOM/text extraction, collection naming, indexer round-trip, privacy gating, and idempotent re-ingest.
+
 ### Documentation
 - README rewritten with badges, Mermaid architecture diagram, comparison table, and accurate MCP setup instructions (replaced the hardcoded `/Users/David/...` example path with a placeholder).
 - Clarified Python version support (3.9+ supported, 3.12 used in CI and Docker).

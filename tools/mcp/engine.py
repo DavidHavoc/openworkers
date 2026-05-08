@@ -135,6 +135,7 @@ class ToolRegistry:
             CrossRefVerificationTool,
             SemanticScholarSearchTool,
         )
+        from tools.mcp.rag import RAGSearchTool
 
         self._tools: dict[str, MCPTool] = {
             "web_search": WebSearchTool(),
@@ -143,6 +144,7 @@ class ToolRegistry:
             "arxiv_search": ArxivSearchTool(),
             "semantic_scholar_search": SemanticScholarSearchTool(),
             "crossref_verification": CrossRefVerificationTool(),
+            "rag_search": RAGSearchTool(),
         }
 
     def get_tool(self, tool_name: str) -> MCPTool:

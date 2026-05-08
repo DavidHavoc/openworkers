@@ -17,6 +17,7 @@
 - ✅ FastAPI surface with task submission and result polling
 - ✅ Evaluation harness covering routing correctness and search recall
 - ✅ Docker Compose stack (Redis, Qdrant, CLI, MCP) and CI matrix on Python 3.9 / 3.12
+- ✅ **RAG over user PDFs** — `thesis ingest add paper.pdf --collection my_papers` chunks + embeds via FastEmbed (BAAI/bge-small-en-v1.5) into Qdrant; the researcher transparently retrieves from the user collection when `thesis research ... --rag-collection my_papers` is set. Collections are namespaced under `rag_*` so they cannot collide with the thesis corpus or episodic memory.
 
 ## Proposed for 1.0
 
@@ -39,7 +40,7 @@ The 1.0 line targets a polished, packaged release on PyPI. The themes:
 ### Extensibility
 - 📋 **Provider registry** — `@register_provider("ollama")` decorator + entry-point discovery; first-class **Ollama**, **Together**, **Groq**, and generic OpenAI-compatible support
 - 📋 **Tool registry** — every literature source is a class registered via entry points; users add their own without forking
-- 📋 **RAG over user PDFs** — `openworkers ingest paper.pdf --collection my_papers` chunks and embeds into Qdrant; researcher transparently retrieves alongside arXiv/SS
+- ✅ **RAG over user PDFs** — *shipped in 0.1.x*; see the Shipped section above. Future work: `add` accepts directories, optional reranker, and an `--exclude-source` flag.
 - 📋 **Versioned prompt library** — Jinja2 templates under `prompts/v1/`, addressable as `prompt://name@version`, with an A/B harness scored by the critic
 
 ### Observability

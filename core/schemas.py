@@ -25,6 +25,9 @@ class ResearchContext(BaseModel):
     existing_knowledge: str = ""
     what_they_need: str = ""
     language: str = "en"
+    rag_collection: Optional[str] = None
+    """If set, the researcher pulls additional context from this user RAG
+    collection alongside arXiv / Semantic Scholar."""
 
 
 class ResearchPlan(BaseModel):

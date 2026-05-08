@@ -3,6 +3,7 @@ from typing import Any, List
 
 from qdrant_client import QdrantClient
 
+from core.embeddings import EMBEDDING_MODEL
 from core.schemas import CorpusSection, CorpusStats
 
 
@@ -17,7 +18,7 @@ class CorpusRetrieve:
             self.client = QdrantClient(path=path)
 
         self.collection_name = "thesis_corpus"
-        self.client.set_model("BAAI/bge-small-en-v1.5")
+        self.client.set_model(EMBEDDING_MODEL)
 
     def query_similar_sections(
         self,

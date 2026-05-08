@@ -16,6 +16,7 @@ flowchart TD
     D --> J["ResearchSession"]
 
     E --> T["arXiv / Semantic Scholar"]
+    E --> U[(User RAG<br/>Qdrant)]
     F --> X["CrossRef"]
     G --> R[(Thesis Corpus<br/>Qdrant)]
     H --> R
@@ -63,6 +64,7 @@ The router maps every LLM call to a `(provider, model)` pair via env vars, with 
 | Session store      | Redis or Postgres      | Default 30-day TTL on Redis; permanent on Postgres |
 | Episodic memory    | Qdrant (FastEmbed)     | Permanent — drives `MemoryBrief` for future tasks |
 | Thesis corpus      | Qdrant (FastEmbed)     | Permanent — feeds Stage 5b benchmarks |
+| User RAG           | Qdrant (FastEmbed)     | Permanent; namespaced under `rag_*` collections; populated by `thesis ingest add` |
 
 `create_session_store()` auto-selects Postgres when `DATABASE_URL` is set, otherwise Redis.
 
