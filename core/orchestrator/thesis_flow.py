@@ -5,8 +5,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
-logger = logging.getLogger(__name__)
-
 from core.blackboard.engine import Blackboard
 from core.corpus.analyze import CorpusAnalyzer
 from core.memory.episodic import EpisodicMemory
@@ -46,6 +44,8 @@ from providers.thesis_agents import (
     _build_placeholder_synthesis_report,
 )
 from providers.unified import UnifiedLLM
+
+logger = logging.getLogger(__name__)
 
 
 class ThesisOrchestrator:
