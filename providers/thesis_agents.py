@@ -16,6 +16,13 @@ from core.schemas import (
     SynthesisReport,
     Task,
 )
+from providers.placeholders import (
+    build_placeholder_citation_audit,
+    build_placeholder_critique_result,
+    build_placeholder_lit_map,
+    build_placeholder_research_plan,
+    build_placeholder_synthesis_report,
+)
 from providers.unified import UnifiedLLM
 
 logger = logging.getLogger(__name__)
@@ -117,64 +124,6 @@ def _parse_structured_output(
     return dict_converter(parsed_dict)
 
 
-def _build_placeholder_research_plan(question: str) -> ResearchPlan:
-    return ResearchPlan(
-        plan_id="placeholder-plan-001",
-        research_question=question,
-        subquestions=["What does the existing literature say?", "What methodological gaps exist?"],
-        strategy="broad_survey",
-        search_lanes=[
-            {
-                "query": "placeholder search",
-                "source": "semantic_scholar",
-                "purpose": "initial survey",
-            },
-        ],
-        evidence_needs=["literature review", "methodology assessment"],
-        budget_allocation={"max_searches": 5, "max_papers_per_search": 10},
-        suggested_methodology="systematic review",
-    )
-
-
-def _build_placeholder_lit_map(question: str) -> LitMap:
-    return LitMap(
-        research_question=question,
-        supporting=[],
-        challenging=[],
-        adjacent=[],
-        total_found=0,
-        search_query_used="placeholder_query",
-    )
-
-
-def _build_placeholder_citation_audit() -> CitationAudit:
-    return CitationAudit(claims_checked=0, verified_claims=0)
-
-
-def _build_placeholder_synthesis_report(question: str = "") -> SynthesisReport:
-    return SynthesisReport(
-        research_question=question,
-        method_summary={},
-        dataset_summary={},
-        metric_summary={},
-        corpus_insights={},
-        recommended_reading=[],
-        cross_paper_comparisons=[],
-    )
-
-
-def _build_placeholder_critique_result() -> CritiqueResult:
-    return CritiqueResult(
-        strengths=[],
-        weaknesses=[],
-        gaps=[],
-        counterarguments=[],
-        suggestions=[],
-        methodological_notes=[],
-        overall_assessment="",
-    )
-
-
 class ThesisHeadProvider:
     def __init__(self, unified: UnifiedLLM, compiler: Optional[PromptCompiler] = None):
         self.unified = unified
@@ -212,7 +161,7 @@ class ThesisHeadProvider:
                 if task.research_context
                 else task.description
             )
-            plan = _build_placeholder_research_plan(question)
+            plan = build_placeholder_research_plan(question)
         else:
             plan = _parse_structured_output(response.content, ResearchPlan, _dict_to_research_plan)
 
@@ -244,7 +193,7 @@ class ThesisHeadProvider:
         )
 
         if response.dry_run:
-            critique = _build_placeholder_critique_result()
+            critique = build_placeholder_critique_result()
         else:
             critique = _parse_structured_output(
                 response.content, CritiqueResult, _dict_to_critique_result
@@ -286,7 +235,7 @@ class ResearcherAgent:
         )
 
         if response.dry_run:
-            lit_map = _build_placeholder_lit_map(question)
+            lit_map = build_placeholder_lit_map(question)
         else:
             lit_map = _parse_structured_output(response.content, LitMap, _dict_to_lit_map)
 
@@ -323,7 +272,7 @@ class CheckerAgent:
         )
 
         if response.dry_run:
-            audit = _build_placeholder_citation_audit()
+            audit = build_placeholder_citation_audit()
         else:
             audit = _parse_structured_output(
                 response.content, CitationAudit, _dict_to_citation_audit
@@ -365,7 +314,7 @@ class SynthesizerAgent:
 
         if response.dry_run:
             question = task.research_context.research_question if task.research_context else ""
-            report = _build_placeholder_synthesis_report(question)
+            report = build_placeholder_synthesis_report(question)
         else:
             report = _parse_structured_output(
                 response.content, SynthesisReport, _dict_to_synthesis_report
@@ -404,7 +353,7 @@ class CriticAgent:
         )
 
         if response.dry_run:
-            critique = _build_placeholder_critique_result()
+            critique = build_placeholder_critique_result()
         else:
             critique = _parse_structured_output(
                 response.content, CritiqueResult, _dict_to_critique_result

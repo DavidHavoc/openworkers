@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -7,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 import pybreaker
 
 from providers.budget import BudgetExceededError, get_current_guard
+from providers.placeholders import generate_placeholder_json
 from providers.resilience import (
     ProviderBreakerRegistry,
     call_with_resilience,
@@ -42,25 +42,6 @@ DEFAULT_MODELS: Dict[str, str] = {
     "openai": "gpt-4o-mini",
     "deepseek": "deepseek-chat",
 }
-
-
-def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
-    props = schema.get("properties", {})
-    required = schema.get("required", [])
-    result: Dict[str, Any] = {}
-    for key, prop in props.items():
-        prop_type = prop.get("type", "string")
-        if prop_type == "string":
-            result[key] = "[DRY_RUN]" if key in required else ""
-        elif prop_type in ("integer", "number"):
-            result[key] = 0
-        elif prop_type == "boolean":
-            result[key] = False
-        elif prop_type == "array":
-            result[key] = []
-        elif prop_type == "object":
-            result[key] = {}
-    return json.dumps(result)
 
 
 def _read_mode_config(mode: str, dry_run: bool = False) -> tuple[str, str]:
@@ -164,7 +145,7 @@ class UnifiedLLM:
             elapsed = (time.monotonic() - t0) * 1000
             content = f"[DRY_RUN mode={mode} provider={preferred_provider} model={preferred_model}] Would call {preferred_provider}/{preferred_model}. Prompt: {prompt[:80]}..."
             if response_schema:
-                content = _generate_placeholder_json(response_schema)
+                content = generate_placeholder_json(response_schema)
             response = LLMResponse(
                 content=content,
                 provider_used=preferred_provider,

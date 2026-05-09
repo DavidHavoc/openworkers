@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 from core.orchestrator.compiler import PromptCompiler
 from core.schemas import Task
 from providers.interfaces import HeadProvider, MiddleProvider, WorkerProvider
+from providers.placeholders import generate_placeholder_json
 from providers.unified import UnifiedLLM
 
 _PROVIDER_API_KEY_ATTR = {
@@ -59,7 +60,7 @@ class LLMAdapter:
         if self.dry_run:
             await asyncio.sleep(0.01)
             if response_schema:
-                return _generate_placeholder_json(response_schema)
+                return generate_placeholder_json(response_schema)
             return f"[{self.provider.upper()}/{model_name} DRY_RUN] Processed: {prompt[:50]}..."
         if not self.api_key:
             raise ValueError(f"No API key configured for provider '{self.provider}'")
@@ -164,25 +165,6 @@ class LLMAdapter:
         )
 
         return str(response.choices[0].message.content)
-
-
-def _generate_placeholder_json(schema: Dict[str, Any]) -> str:
-    props = schema.get("properties", {})
-    required = schema.get("required", [])
-    result: Dict[str, Any] = {}
-    for key, prop in props.items():
-        prop_type = prop.get("type", "string")
-        if prop_type == "string":
-            result[key] = "[DRY_RUN]" if key in required else ""
-        elif prop_type == "integer" or prop_type == "number":
-            result[key] = 0
-        elif prop_type == "boolean":
-            result[key] = False
-        elif prop_type == "array":
-            result[key] = []
-        elif prop_type == "object":
-            result[key] = {}
-    return json.dumps(result)
 
 
 def _get_available_providers() -> list[str]:

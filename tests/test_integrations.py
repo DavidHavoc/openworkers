@@ -7,7 +7,8 @@ import pytest
 
 from core.evals.harness import EvaluationHarness
 from core.schemas import CitationAudit, CritiqueResult, LitMap, ResearchPlan, SynthesisReport
-from providers.adapters import LLMAdapter, _generate_placeholder_json
+from providers.adapters import LLMAdapter
+from providers.placeholders import generate_placeholder_json
 from tools.mcp.engine import ToolRegistry
 
 
@@ -50,11 +51,11 @@ async def test_adapters_dry_run(monkeypatch):
 
 
 def test_placeholder_json_validates_pydantic_models():
-    """Placeholder JSON from _generate_placeholder_json passes Pydantic model_validate_json."""
+    """Placeholder JSON from generate_placeholder_json passes Pydantic model_validate_json."""
     for model_cls in (ResearchPlan, LitMap, CitationAudit, SynthesisReport, CritiqueResult):
         schema = model_cls.model_json_schema()
         schema.pop("title", None)
-        raw = _generate_placeholder_json(schema)
+        raw = generate_placeholder_json(schema)
         parsed = json.loads(raw)
         assert isinstance(parsed, dict), f"{model_cls.__name__} placeholder is not a JSON object"
         instance = model_cls.model_validate_json(raw)
@@ -107,13 +108,13 @@ def test_structured_output_schema_includes_all_required_fields():
     schema.pop("title", None)
     required = schema.get("required", [])
 
-    raw = json.loads(_generate_placeholder_json(schema))
+    raw = json.loads(generate_placeholder_json(schema))
     for key in required:
         assert key in raw, f"Required key '{key}' missing from placeholder for CitationAudit"
 
     schema2 = LitMap.model_json_schema()
     schema2.pop("title", None)
-    raw2 = json.loads(_generate_placeholder_json(schema2))
+    raw2 = json.loads(generate_placeholder_json(schema2))
     for key in schema2.get("required", []):
         assert key in raw2, f"Required key '{key}' missing from placeholder for LitMap"
 

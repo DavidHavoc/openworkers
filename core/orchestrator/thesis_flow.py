@@ -37,11 +37,11 @@ from providers.thesis_agents import (
     ResearcherAgent,
     SynthesizerAgent,
     ThesisHeadProvider,
-    _build_placeholder_citation_audit,
-    _build_placeholder_critique_result,
-    _build_placeholder_lit_map,
-    _build_placeholder_research_plan,
-    _build_placeholder_synthesis_report,
+    build_placeholder_citation_audit,
+    build_placeholder_critique_result,
+    build_placeholder_lit_map,
+    build_placeholder_research_plan,
+    build_placeholder_synthesis_report,
 )
 from providers.unified import UnifiedLLM
 
@@ -157,7 +157,7 @@ class ThesisOrchestrator:
         async def _run_planner() -> ResearchPlan:
             if not route.activate_head_planner:
                 obs_logger.log_event("stage_skipped", session_id, {"stage": "head_planner"})
-                return _build_placeholder_research_plan(research_context.research_question)
+                return build_placeholder_research_plan(research_context.research_question)
             try:
                 result = await self.head.execute(
                     task,
@@ -174,7 +174,7 @@ class ThesisOrchestrator:
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "head_planner", "error": str(e)}
                 )
-                return _build_placeholder_research_plan(research_context.research_question)
+                return build_placeholder_research_plan(research_context.research_question)
 
         async def _run_memory() -> MemoryBrief:
             try:
@@ -277,12 +277,12 @@ class ThesisOrchestrator:
                 )
             except Exception as e:
                 errors.append(f"researcher: {e}")
-                lit_map = _build_placeholder_lit_map(research_context.research_question)
+                lit_map = build_placeholder_lit_map(research_context.research_question)
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "researcher", "error": str(e)}
                 )
         else:
-            lit_map = _build_placeholder_lit_map(research_context.research_question)
+            lit_map = build_placeholder_lit_map(research_context.research_question)
             obs_logger.log_event("stage_skipped", session_id, {"stage": "researcher"})
 
         # ── Phase C: checker ∥ synthesizer (both consume lit_map, neither
@@ -296,7 +296,7 @@ class ThesisOrchestrator:
         async def _run_checker() -> CitationAudit:
             if not route.activate_checker:
                 obs_logger.log_event("stage_skipped", session_id, {"stage": "checker"})
-                return _build_placeholder_citation_audit()
+                return build_placeholder_citation_audit()
             try:
                 result = await self.checker.execute(task, {"blackboard_entries": shared_entries})
                 audit = cast(CitationAudit, result["output"])
@@ -310,12 +310,12 @@ class ThesisOrchestrator:
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "checker", "error": str(e)}
                 )
-                return _build_placeholder_citation_audit()
+                return build_placeholder_citation_audit()
 
         async def _run_synthesizer() -> SynthesisReport:
             if not route.activate_synthesizer:
                 obs_logger.log_event("stage_skipped", session_id, {"stage": "synthesizer"})
-                return _build_placeholder_synthesis_report(research_context.research_question)
+                return build_placeholder_synthesis_report(research_context.research_question)
             try:
                 result = await self.synthesizer.execute(
                     task, {"blackboard_entries": shared_entries}
@@ -338,7 +338,7 @@ class ThesisOrchestrator:
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "synthesizer", "error": str(e)}
                 )
-                return _build_placeholder_synthesis_report(research_context.research_question)
+                return build_placeholder_synthesis_report(research_context.research_question)
 
         citation_audit, synthesis_report = await asyncio.gather(
             _run_checker(),
@@ -359,12 +359,12 @@ class ThesisOrchestrator:
                 )
             except Exception as e:
                 errors.append(f"critic: {e}")
-                critique = _build_placeholder_critique_result()
+                critique = build_placeholder_critique_result()
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "critic", "error": str(e)}
                 )
         else:
-            critique = _build_placeholder_critique_result()
+            critique = build_placeholder_critique_result()
             obs_logger.log_event("stage_skipped", session_id, {"stage": "critic"})
 
         # ── Stage 7: HEAD final pass (supervisor) ──
@@ -383,12 +383,12 @@ class ThesisOrchestrator:
                 )
             except Exception as e:
                 errors.append(f"head_supervisor: {e}")
-                final_critique = _build_placeholder_critique_result()
+                final_critique = build_placeholder_critique_result()
                 obs_logger.log_event(
                     "stage_failed", session_id, {"stage": "head_supervisor", "error": str(e)}
                 )
         else:
-            final_critique = _build_placeholder_critique_result()
+            final_critique = build_placeholder_critique_result()
             obs_logger.log_event("stage_skipped", session_id, {"stage": "head_supervisor"})
 
         # ── Stage 8: Assemble ResearchSession ──
@@ -669,6 +669,6 @@ class ThesisOrchestrator:
             output: Any = result.get("output")
             if isinstance(output, CritiqueResult):
                 return output
-            return _build_placeholder_critique_result()
+            return build_placeholder_critique_result()
         except Exception:
-            return _build_placeholder_critique_result()
+            return build_placeholder_critique_result()
