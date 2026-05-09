@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     @field_validator("max_budget_usd", mode="before")
     @classmethod
     def _coerce_budget(cls, v: Any) -> Optional[float]:
-        if not v:
+        if v is None or v == "":
             return None
         try:
             return float(v)
