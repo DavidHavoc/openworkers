@@ -13,7 +13,7 @@ qdrant, …) also emit structured output without any changes.
 Usage
 -----
 Call ``configure_logging()`` once at each app entrypoint (``apps/api/``,
-``apps/mcp_server/``, ``apps/worker/``). Do **not** call it in library code
+``apps/mcp_server/``). Do **not** call it in library code
 or tests — tests rely on pytest's default capture.
 
     from core.logging import configure_logging

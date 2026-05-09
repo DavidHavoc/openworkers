@@ -114,7 +114,7 @@ This runs the full hook stack: trailing whitespace, YAML/JSON/TOML validity, lar
 ## Project layout
 
 ```
-apps/        Entry points — CLI, FastAPI server, MCP server, worker stub.
+apps/        Entry points — CLI, FastAPI server, MCP server.
              Nothing in apps/ is imported by other packages.
 
 core/        Orchestrator, router, blackboard, memory, schemas, evals, sessions.

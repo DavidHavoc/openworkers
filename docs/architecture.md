@@ -99,7 +99,7 @@ Output format is driven by the `ENVIRONMENT` setting:
 
 Each entry carries `log_level`, `logger_name`, and an ISO-8601 timestamp. `structlog.contextvars` is included in the chain so any key bound with `structlog.contextvars.bind_contextvars()` (e.g., `session_id`) propagates to every log line emitted within that async context.
 
-`configure_logging()` must be called once at each app entrypoint (`apps/api/`, `apps/mcp_server/`, `apps/worker/`). It must not be called in library code or tests.
+`configure_logging()` must be called once at each app entrypoint (`apps/api/`, `apps/mcp_server/`). It must not be called in library code or tests.
 
 ## Embedding cache
 
