@@ -71,3 +71,63 @@ The router maps every LLM call to a `(provider, model)` pair via env vars, with 
 ## Observability
 
 Every agent call emits a structured JSON event via `core.observability.metrics.obs_logger`: session lifecycle, stage start/complete/skip/fail, memory hits, fallback events, and budget traces. Search the logs by `session_id` to reconstruct any pipeline run.
+
+## Configuration
+
+All environment variables are declared as typed fields on the `Settings` class in `core/config.py` (pydantic-settings). No module touches `os.environ` directly — every config value is accessed via `get_settings()`, which returns an `lru_cache` singleton.
+
+| Group            | Key variables |
+|------------------|---------------|
+| Infrastructure   | `REDIS_URL`, `QDRANT_URL`, `DATABASE_URL`, `SESSION_TTL_SECONDS` |
+| LLM routing      | `THESIS_QUALITY_PROVIDER/MODEL`, `THESIS_BALANCED_PROVIDER/MODEL`, `THESIS_CHEAP_PROVIDER/MODEL` |
+| API keys         | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` |
+| Budget guard     | `MAX_BUDGET_USD`, `BUDGET_OUTPUT_TOKEN_FLOOR` |
+| Resilience       | `RESILIENCE_RETRY_ATTEMPTS`, `RESILIENCE_RETRY_BASE_SEC`, `RESILIENCE_RETRY_MAX_SEC`, `RESILIENCE_BREAKER_FAIL_MAX`, `RESILIENCE_BREAKER_RESET_SEC` |
+| Observability    | `ENVIRONMENT`, `LOG_LEVEL` |
+| Embedding cache  | `EMBEDDING_CACHE_DIR` |
+
+Settings are read from environment variables first, with `.env` as a fallback. Unknown variables are silently ignored (`extra="ignore"`). In tests, call `reset_settings(use_env_file=False)` after `monkeypatch.setenv` to clear the singleton and make patched values take effect.
+
+## Structured logging
+
+`core/logging.py` provides a single `configure_logging()` call that wires structlog to the standard library root logger. All third-party loggers (redis, httpx, qdrant) are automatically routed through the same processor chain.
+
+Output format is driven by the `ENVIRONMENT` setting:
+
+- `development` (default) — ConsoleRenderer (structlog.dev.ConsoleRenderer); tracebacks rendered inline; easy to read in a terminal.
+- `production` — newline-delimited JSON; ready for ingestion by Datadog, ELK, Cloud Logging, or any log aggregator.
+
+Each entry carries `log_level`, `logger_name`, and an ISO-8601 timestamp. `structlog.contextvars` is included in the chain so any key bound with `structlog.contextvars.bind_contextvars()` (e.g., `session_id`) propagates to every log line emitted within that async context.
+
+`configure_logging()` must be called once at each app entrypoint (`apps/api/`, `apps/mcp_server/`, `apps/worker/`). It must not be called in library code or tests.
+
+## Embedding cache
+
+FastEmbed is used to embed text for all Qdrant operations (episodic memory, thesis corpus, user RAG). Two cache layers prevent redundant work:
+
+1. **Model weight cache** — FastEmbed writes downloaded model weights to `~/.cache/fastembed/` automatically. This survives process restarts.
+2. **Vector output cache** — `core/embedding_cache.py` adds a diskcache (SQLite WAL) layer keyed on `sha256(model_name + NUL + text)`. A warm-cache lookup takes ~0.1 ms versus ~20 ms for CPU inference, and it also survives container restarts.
+
+Default cache location: `~/.cache/openworkers/embeddings`. Override with `EMBEDDING_CACHE_DIR`. The cache is thread-safe and safe to call from `asyncio.to_thread`. `diskcache` is an optional dependency — if not installed the embedding path falls back to always running inference.
+
+## Resilience
+
+LLM provider calls pass through a two-layer protection stack in `providers/resilience.py`:
+
+1. **Tenacity retry** — transient errors (timeout, 429, 5xx, network blip) are retried with exponential backoff and random jitter. Permanent errors (auth failure, malformed request, content filter) are not retried and fall through immediately to the next provider in the fallback chain.
+
+2. **pybreaker circuit breaker** — one `CircuitBreaker` per provider, lazily constructed by `ProviderBreakerRegistry`. When a provider accumulates `RESILIENCE_BREAKER_FAIL_MAX` consecutive transient failures the breaker opens and short-circuits further calls for `RESILIENCE_BREAKER_RESET_SEC` seconds. Only transient errors count toward the trip threshold; permanent errors (auth, schema) reset the counter so misconfigured providers do not trip the breaker for other callers.
+
+The two mechanisms compose: `call_with_resilience()` checks the breaker first (fail fast if open), then runs the retry loop inside the breaker's protection. A `CircuitBreakerError` from a tripped breaker is treated the same as any other provider failure by the fallback chain.
+
+## Entry points
+
+Three separate applications share the same `core/` and `providers/` libraries:
+
+| App | Module | Transport | Notes |
+|-----|--------|-----------|-------|
+| FastAPI task queue | `apps/api/main.py` | HTTP | Accepts `POST /tasks/`, runs the pipeline as a background `asyncio` task, exposes `GET /tasks/{id}` for polling. Task state is held in-process (`_tasks` dict). |
+| MCP server | `apps/mcp_server/main.py` | stdio (JSON-RPC 2.0) | Implements `initialize`, `tools/list`, and `tools/call` per the MCP 2024-11-05 protocol. Exposes four tools: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`. Notifications (requests with `id=null`) are silently dropped. |
+| CLI | `apps/cli/main.py` | stdin/stdout | Interactive or scriptable access to the same pipeline. |
+
+All three construct a `ThesisOrchestrator` from the same building blocks (`create_unified_llm()`, `EpisodicMemory`, `Router`, `ToolRegistry`) and call `orch.execute(rc)` to run the pipeline. The API and CLI attach a persistent `session_store`; the MCP server uses an in-memory Qdrant instance (`qdrant_location=":memory:"`) and no persistent session store to avoid external service dependencies when invoked by an IDE plugin.

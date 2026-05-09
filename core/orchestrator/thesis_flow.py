@@ -1,7 +1,8 @@
 import asyncio
+import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 from core.blackboard.engine import Blackboard
@@ -44,6 +45,8 @@ from providers.thesis_agents import (
 )
 from providers.unified import UnifiedLLM
 
+logger = logging.getLogger(__name__)
+
 
 class ThesisOrchestrator:
     def __init__(
@@ -70,16 +73,20 @@ class ThesisOrchestrator:
         self.critic = CriticAgent(unified=unified, compiler=self.compiler)
         self.corpus = CorpusAnalyzer()
 
-    def _add_entry(self, entry_type: str, content: Dict[str, Any]) -> Optional[BlackboardEntry]:
+    def _add_entry(
+        self, entry_type: str, content: Dict[str, Any], blackboard: Optional[Blackboard] = None
+    ) -> Optional[BlackboardEntry]:
+        bb = blackboard if blackboard is not None else self.blackboard
         try:
-            return self.blackboard.add_entry(entry_type, content)
-        except Exception:
-            pass
+            return bb.add_entry(entry_type, content)
+        except Exception as exc:
+            logger.warning("Blackboard write failed (entry_type=%s): %s", entry_type, exc)
         return None
 
-    def _get_entries(self) -> List[BlackboardEntry]:
+    def _get_entries(self, blackboard: Optional[Blackboard] = None) -> List[BlackboardEntry]:
+        bb = blackboard if blackboard is not None else self.blackboard
         try:
-            return self.blackboard.get_all_entries()
+            return bb.get_all_entries()
         except Exception:
             return []
 
@@ -102,10 +109,7 @@ class ThesisOrchestrator:
         # requests.
         rag_collection = research_context.rag_collection or None
 
-        try:
-            self.blackboard = Blackboard(session_id=session_id)
-        except Exception:
-            self.blackboard = Blackboard(session_id=session_id)
+        blackboard = Blackboard(session_id=session_id)
 
         task = Task(
             task_id=str(uuid.uuid4()),
@@ -114,7 +118,7 @@ class ThesisOrchestrator:
             complexity_estimated="medium",
             research_context=research_context,
         )
-        self._add_entry("task", task.model_dump())
+        self._add_entry("task", task.model_dump(), blackboard)
 
         budget = BudgetState(remaining_usd=1.00, spent_usd=0.0, token_limit=100000)
         route = self.router.route_thesis_task(
@@ -131,6 +135,7 @@ class ThesisOrchestrator:
                 "agents": route.agents_to_run(),
                 "provider_map": {k: list(v) for k, v in route.provider_map.items()},
             },
+            blackboard,
         )
 
         obs_logger.log_event(
@@ -156,10 +161,10 @@ class ThesisOrchestrator:
             try:
                 result = await self.head.execute(
                     task,
-                    {"blackboard_entries": self._get_entries()},
+                    {"blackboard_entries": self._get_entries(blackboard)},
                     mode="planner",
                 )
-                self._add_entry("agent_output", result)
+                self._add_entry("agent_output", result, blackboard)
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "head_planner", "status": "success"}
                 )
@@ -181,6 +186,7 @@ class ThesisOrchestrator:
                 self._add_entry(
                     "memory_guidance",
                     {"guidance": brief.to_formatted_string()},
+                    blackboard,
                 )
                 obs_logger.log_memory_hit(session_id, "thesis", brief.similar_past_tasks_count)
                 return brief
@@ -208,6 +214,7 @@ class ThesisOrchestrator:
                         ),
                         "similar_sections": len(corpus_ctx.similar_sections),
                     },
+                    blackboard,
                 )
                 obs_logger.log_event(
                     "stage_completed",
@@ -256,14 +263,15 @@ class ThesisOrchestrator:
                                 p if isinstance(p, dict) else p.model_dump() for p in deduped
                             ],
                         },
+                        blackboard,
                     )
-                    search_context = self._get_entries()
+                    search_context = self._get_entries(blackboard)
                 else:
-                    search_context = self._get_entries()
+                    search_context = self._get_entries(blackboard)
 
                 result = await self.researcher.execute(task, {"blackboard_entries": search_context})
                 lit_map = result["output"]
-                self._add_entry("lit_map", lit_map.model_dump())
+                self._add_entry("lit_map", lit_map.model_dump(), blackboard)
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "researcher", "status": "success"}
                 )
@@ -283,7 +291,7 @@ class ThesisOrchestrator:
         # memory_guidance}; specialist_synthesizer.md uses {task, lit_map,
         # memory_guidance}). Running them concurrently halves the middle-tier
         # critical path. ──
-        shared_entries = self._get_entries()
+        shared_entries = self._get_entries(blackboard)
 
         async def _run_checker() -> CitationAudit:
             if not route.activate_checker:
@@ -292,7 +300,7 @@ class ThesisOrchestrator:
             try:
                 result = await self.checker.execute(task, {"blackboard_entries": shared_entries})
                 audit = cast(CitationAudit, result["output"])
-                self._add_entry("citation_audit", audit.model_dump())
+                self._add_entry("citation_audit", audit.model_dump(), blackboard)
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "checker", "status": "success"}
                 )
@@ -319,6 +327,7 @@ class ThesisOrchestrator:
                         "entry_type": "synthesis_report",
                         "content": report.model_dump(),
                     },
+                    blackboard,
                 )
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "synthesizer", "status": "success"}
@@ -341,10 +350,10 @@ class ThesisOrchestrator:
         if route.activate_critic:
             try:
                 result = await self.critic.execute(
-                    task, {"blackboard_entries": self._get_entries()}
+                    task, {"blackboard_entries": self._get_entries(blackboard)}
                 )
                 critique = result["output"]
-                self._add_entry("critique", critique.model_dump())
+                self._add_entry("critique", critique.model_dump(), blackboard)
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "critic", "status": "success"}
                 )
@@ -364,11 +373,11 @@ class ThesisOrchestrator:
             try:
                 result = await self.head.execute(
                     task,
-                    {"blackboard_entries": self._get_entries()},
+                    {"blackboard_entries": self._get_entries(blackboard)},
                     mode="supervisor",
                 )
                 final_critique = result["output"]
-                self._add_entry("critique", final_critique.model_dump())
+                self._add_entry("critique", final_critique.model_dump(), blackboard)
                 obs_logger.log_event(
                     "stage_completed", session_id, {"stage": "head_supervisor", "status": "success"}
                 )
@@ -392,7 +401,7 @@ class ThesisOrchestrator:
             citation_audit=citation_audit,
             synthesis_report=synthesis_report,
             critique=final_critique,
-            created_at=datetime.utcnow().isoformat() + "Z",
+            created_at=datetime.now(timezone.utc).isoformat(),
             status="complete" if not errors else "partial",
         )
 
@@ -403,7 +412,7 @@ class ThesisOrchestrator:
             worker_agents = [a for a in agent_agents if a == "researcher"]
             episode = MemoryEpisode(
                 episode_id=str(uuid.uuid4()),
-                timestamp=datetime.utcnow().isoformat() + "Z",
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 task_summary=research_context.research_question,
                 task_type="thesis",
                 privacy_tier="public",
@@ -647,7 +656,7 @@ class ThesisOrchestrator:
                 entry_type="task",
                 content=task.model_dump(),
                 metadata={},
-                timestamp=datetime.utcnow().isoformat() + "Z",
+                timestamp=datetime.now(timezone.utc).isoformat(),
             ),
         ]
 

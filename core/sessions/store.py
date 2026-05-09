@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import redis
+import redis.asyncio as aioredis
 
 from core.schemas import ResearchSession
 
@@ -41,21 +41,21 @@ class RedisSessionStore(BaseSessionStore):
         from core.config import get_settings
 
         url = redis_url or get_settings().redis_url
-        self.redis = redis.from_url(url, decode_responses=True)
+        self.redis = aioredis.from_url(url, decode_responses=True)
 
     async def save(self, session: ResearchSession) -> None:
         session_key = f"{_SESSION_KEY_PREFIX}{session.session_id}"
         data = session.model_dump_json()
-        pipe = self.redis.pipeline()
         from core.config import get_settings
 
-        pipe.setex(session_key, get_settings().session_ttl_seconds, data)
-        pipe.zadd(_INDEX_KEY, {session.session_id: time.time()})
-        pipe.execute()
+        async with self.redis.pipeline() as pipe:
+            await pipe.setex(session_key, get_settings().session_ttl_seconds, data)
+            await pipe.zadd(_INDEX_KEY, {session.session_id: time.time()})
+            await pipe.execute()
 
     async def load(self, session_id: str) -> Optional[ResearchSession]:
         session_key = f"{_SESSION_KEY_PREFIX}{session_id}"
-        raw = self.redis.get(session_key)
+        raw = await self.redis.get(session_key)
         if raw is None:
             return None
         return ResearchSession.model_validate_json(raw)
@@ -67,14 +67,16 @@ class RedisSessionStore(BaseSessionStore):
         discipline: Optional[str] = None,
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        members = self.redis.zrevrange(_INDEX_KEY, offset, offset + limit - 1, withscores=True)
+        members = await self.redis.zrevrange(
+            _INDEX_KEY, offset, offset + limit - 1, withscores=True
+        )
         results: List[Dict[str, Any]] = []
         for session_id, score in members:
             result = {
                 "session_id": session_id,
-                "created_at": datetime.utcfromtimestamp(score).isoformat() + "Z",
+                "created_at": datetime.fromtimestamp(score, tz=timezone.utc).isoformat(),
             }
-            raw = self.redis.get(f"{_SESSION_KEY_PREFIX}{session_id}")
+            raw = await self.redis.get(f"{_SESSION_KEY_PREFIX}{session_id}")
             if raw:
                 s = ResearchSession.model_validate_json(raw)
                 result["research_question"] = s.research_context.research_question
@@ -89,19 +91,19 @@ class RedisSessionStore(BaseSessionStore):
 
     async def delete(self, session_id: str) -> bool:
         session_key = f"{_SESSION_KEY_PREFIX}{session_id}"
-        deleted = self.redis.delete(session_key)
+        deleted = await self.redis.delete(session_key)
         if deleted:
-            self.redis.zrem(_INDEX_KEY, session_id)
+            await self.redis.zrem(_INDEX_KEY, session_id)
         return bool(deleted)
 
     async def count(self) -> int:
-        return self.redis.zcard(_INDEX_KEY)
+        return await self.redis.zcard(_INDEX_KEY)
 
-    def clear_all(self) -> None:
-        keys = self.redis.keys(f"{_SESSION_KEY_PREFIX}*")
+    async def clear_all(self) -> None:
+        keys = [k async for k in self.redis.scan_iter(f"{_SESSION_KEY_PREFIX}*")]
         if keys:
-            self.redis.delete(*keys)
-        self.redis.delete(_INDEX_KEY)
+            await self.redis.delete(*keys)
+        await self.redis.delete(_INDEX_KEY)
 
 
 class PgSessionStore(BaseSessionStore):

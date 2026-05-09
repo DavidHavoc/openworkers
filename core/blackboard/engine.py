@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import redis
@@ -34,6 +34,7 @@ class Blackboard:
             "critique",
             "citation_audit",
             "corpus_benchmarks",
+            "memory_guidance",
         }
         if entry_type not in allowed_types:
             raise ValueError(f"Invalid entry_type '{entry_type}'. Must be one of {allowed_types}")
@@ -43,7 +44,7 @@ class Blackboard:
             entry_type=entry_type,
             content=content,
             metadata=metadata or {},
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
         # Store in Redis as JSON string under session-specific key
@@ -52,9 +53,8 @@ class Blackboard:
         return entry
 
     def get_entries_by_type(self, entry_type: str) -> List[BlackboardEntry]:
-        keys = self.redis.keys(f"{self.prefix}*")
         entries = []
-        for k in keys:
+        for k in self.redis.scan_iter(f"{self.prefix}*"):
             data = self.redis.get(k)
             if data:
                 entry = BlackboardEntry.model_validate_json(data)
@@ -63,9 +63,8 @@ class Blackboard:
         return sorted(entries, key=lambda x: x.timestamp)
 
     def get_all_entries(self) -> List[BlackboardEntry]:
-        keys = self.redis.keys(f"{self.prefix}*")
         entries = []
-        for k in keys:
+        for k in self.redis.scan_iter(f"{self.prefix}*"):
             data = self.redis.get(k)
             if data:
                 entries.append(BlackboardEntry.model_validate_json(data))

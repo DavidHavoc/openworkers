@@ -42,9 +42,9 @@ def _get_cache() -> Any | None:
         logger.debug("diskcache not installed; embedding cache disabled")
         return None
 
-    import os
+    from core.config import get_settings
 
-    cache_dir = os.environ.get("EMBEDDING_CACHE_DIR", "") or _DEFAULT_CACHE_DIR
+    cache_dir = get_settings().embedding_cache_dir or _DEFAULT_CACHE_DIR
     _disk = diskcache.Cache(cache_dir)
     return _disk
 

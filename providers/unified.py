@@ -254,7 +254,7 @@ class UnifiedLLM:
                     registry=self.breakers,
                 )
                 elapsed = (time.monotonic() - t0) * 1000
-                cost = self._estimate_cost(result, provider)
+                cost = self._estimate_cost(result, provider, prompt, system_prompt)
 
                 if budget is not None:
                     self._add_spend(provider, cost)
@@ -346,10 +346,13 @@ class UnifiedLLM:
     def _default_model_for(self, provider: str) -> str:
         return DEFAULT_MODELS.get(provider, "unknown")
 
-    def _estimate_cost(self, text: str, provider: str) -> float:
-        tokens = len(text) / 3.5
+    def _estimate_cost(
+        self, response_text: str, provider: str, prompt: str = "", system_prompt: str = ""
+    ) -> float:
+        output_tokens = len(response_text) / 3.5
+        input_tokens = (len(prompt) + len(system_prompt)) / 3.5
         rate = COST_PER_1K_TOKENS.get(provider, 0.005)
-        return (tokens / 1000) * rate
+        return ((input_tokens + output_tokens) / 1000) * rate
 
     def _get_spend(self, provider: str) -> float:
         return self._session_spend.get(provider, 0.0)

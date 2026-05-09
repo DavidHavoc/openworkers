@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from typing import Any, List
@@ -6,6 +7,8 @@ from qdrant_client import QdrantClient
 
 from core.embeddings import EMBEDDING_MODEL
 from core.schemas import CorpusSection
+
+logger = logging.getLogger(__name__)
 
 SECTION_PATTERNS = [
     (r"(?i)^\s*(?:chapter\s+\d+[.:]\s*)?introduction\s*$", "introduction"),
@@ -231,9 +234,7 @@ class CorpusIngest:
                 ids=ids,
             )
         except Exception as e:
-            import sys
-
-            print(f"[CorpusIngest] add failed: {e}", file=sys.stderr)
+            logger.error("CorpusIngest.add failed: %s", e, exc_info=True)
             raise
 
         return corpus_sections
