@@ -623,3 +623,45 @@ async def test_thesis_pipeline_auto_saves_session(monkeypatch):
     assert loaded is not None
     assert loaded.session_id == session.session_id
     assert loaded.research_context.research_question == "Does exercise improve focus?"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_executions_do_not_corrupt_self_blackboard_cr02(monkeypatch):
+    """CR-02 regression: concurrent execute() on a shared orchestrator must not mutate self.blackboard.
+
+    Pre-fix _execute_inner did `self.blackboard = Blackboard(session_id=session_id)`,
+    so the second concurrent call would overwrite the first's blackboard reference
+    while the first was still using it — cross-session leakage.
+    """
+    import asyncio
+
+    from core.memory.episodic import EpisodicMemory
+    from core.orchestrator.thesis_flow import ThesisOrchestrator
+    from core.router.engine import Router
+    from core.schemas import ResearchContext
+    from providers.unified import UnifiedLLM
+    from tools.mcp.engine import ToolRegistry
+
+    monkeypatch.setenv("DRY_RUN", "true")
+
+    unified = UnifiedLLM()
+    memory = EpisodicMemory(qdrant_location=":memory:")
+    router = Router()
+    tools = ToolRegistry()
+    orch = ThesisOrchestrator(unified=unified, memory=memory, router=router, tool_registry=tools)
+
+    initial_blackboard = orch.blackboard
+    initial_session_id = initial_blackboard.session_id
+
+    rc1 = ResearchContext(research_question="Q1", topic_summary="t1", discipline="psychology")
+    rc2 = ResearchContext(research_question="Q2", topic_summary="t2", discipline="economics")
+
+    s1, s2 = await asyncio.gather(orch.execute(rc1), orch.execute(rc2))
+
+    # Both executions complete and produced distinct sessions.
+    assert s1.session_id != s2.session_id
+
+    # Critically: orch.blackboard reference and session_id are unchanged.
+    # Pre-fix this would equal s1.session_id or s2.session_id depending on race timing.
+    assert orch.blackboard is initial_blackboard
+    assert orch.blackboard.session_id == initial_session_id

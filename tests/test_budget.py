@@ -351,3 +351,33 @@ async def test_orchestrator_installs_guard_for_session(monkeypatch, tmp_path):
 def test_module_singleton_resets():
     """Smoke test: module-level utilities don't leak state across tests."""
     assert budget_module.get_current_guard() is None
+
+
+def test_unified_estimate_cost_includes_input_tokens_wr05():
+    """WR-05 regression: _estimate_cost counts input tokens, not just response length.
+
+    Pre-fix the estimate measured only the response string. For long prompts
+    with short responses (the typical thesis-pipeline pattern) this systematically
+    under-reported spend, letting cumulative cost drift past MAX_BUDGET_USD.
+    """
+    from providers.unified import COST_PER_1K_TOKENS, UnifiedLLM
+
+    unified = UnifiedLLM()
+
+    long_prompt = "x" * 10000
+    long_system = "y" * 5000
+    short_response = "ok"
+
+    cost = unified._estimate_cost(short_response, "openai", long_prompt, long_system)
+
+    # Expected: (10000 + 5000 + 2) / 3.5 ≈ 4286 tokens × $0.005/1K ≈ $0.0214
+    expected_min = (15000 / 3.5 / 1000) * COST_PER_1K_TOKENS["openai"] * 0.95
+    assert (
+        cost >= expected_min
+    ), f"Estimated cost {cost} is too low — input tokens may not be counted (WR-05)"
+
+    # Sanity: response-only would be ~$0.0000029, far below expected_min.
+    response_only = (len(short_response) / 3.5 / 1000) * COST_PER_1K_TOKENS["openai"]
+    assert (
+        cost > response_only * 100
+    ), f"Cost {cost} is closer to response-only ({response_only}) than to input-inclusive"
