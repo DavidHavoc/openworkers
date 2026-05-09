@@ -67,7 +67,9 @@ class RedisSessionStore(BaseSessionStore):
         discipline: Optional[str] = None,
         status: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        members = await self.redis.zrevrange(_INDEX_KEY, offset, offset + limit - 1, withscores=True)
+        members = await self.redis.zrevrange(
+            _INDEX_KEY, offset, offset + limit - 1, withscores=True
+        )
         results: List[Dict[str, Any]] = []
         for session_id, score in members:
             result = {

@@ -84,7 +84,6 @@ def _collection_for(name: str) -> str:
     return f"{COLLECTION_PREFIX}{safe}_{suffix}"
 
 
-
 def _split_sentences(text: str) -> list[str]:
     """Sentence-split with light abbreviation handling.
 
