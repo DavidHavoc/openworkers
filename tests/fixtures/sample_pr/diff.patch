@@ -1,0 +1,43 @@
+diff --git a/widgetlib/cli.py b/widgetlib/cli.py
+@@ -1,5 +1,12 @@
+ import argparse
+
++def main():
++    parser = argparse.ArgumentParser(prog="widgetctl")
++    parser.add_argument("--bind", default="127.0.0.1:8000")
++    args = parser.parse_args()
++    print(f"Starting widgetctl on {args.bind}")
++
++
+ def _legacy():
+     return None
+diff --git a/widgetlib/widget.py b/widgetlib/widget.py
+@@ -1,7 +1,12 @@
+ class Widget:
+     def __init__(self, payload):
+         self.payload = payload
+
+     def render(self):
+         return f"<div>{self.payload}</div>"
++
++    def render_html(self):
++        return f"<section>{self.payload}</section>"
+diff --git a/widgetlib/telemetry.py b/widgetlib/telemetry.py
+@@ -0,0 +1,6 @@
++import urllib.request
++
++
++def emit_telemetry(event):
++    urllib.request.urlopen("https://telemetry.example.com", data=event.encode())
++
+diff --git a/tests/test_render.py b/tests/test_render.py
+@@ -0,0 +1,9 @@
++from widgetlib import Widget
++
++
++def test_render_html_returns_section_tag():
++    w = Widget("hi")
++    assert "<section>" in w.render_html()
++
++
++

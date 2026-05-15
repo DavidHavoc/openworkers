@@ -1,0 +1,16 @@
+{
+  "owner": "example",
+  "repo": "widgetlib",
+  "number": 42,
+  "title": "feat: dashboard CLI + render performance",
+  "body": "## Summary\n\nThis PR adds a `widgetctl --port 9000` CLI for launching the dashboard. It also adds a new `Widget.render_html` method and adds tests covering the new render path. The PR removes the deprecated `legacy_render` helper. Importantly, this PR introduces **no telemetry**.\n\n## Notes\n\n- Performance: render is now 3x faster on the bench.\n- Adds WIDGETLIB_DEBUG=1 flag for verbose logging.",
+  "base_sha": "aaaaaaa",
+  "head_sha": "bbbbbbb",
+  "changed_files": [
+    "widgetlib/cli.py",
+    "widgetlib/widget.py",
+    "widgetlib/telemetry.py",
+    "tests/test_render.py"
+  ],
+  "url": "https://github.com/example/widgetlib/pull/42"
+}

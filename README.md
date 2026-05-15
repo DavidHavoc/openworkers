@@ -17,7 +17,7 @@ Both domains share the same DNA: a hierarchical pipeline (planner → researcher
 
 ## Code audit *(new track)*
 
-`openworkers audit readme <repo>` extracts every factual claim from a README and verdicts each one against the actual repository:
+`openworkers audit readme <repo>` and `openworkers audit pr <github-pr-url>` extract every factual claim from a README or PR description and verdict each one against the actual repository / diff:
 
 | Verdict | Meaning |
 |---|---|
@@ -26,9 +26,11 @@ Both domains share the same DNA: a hierarchical pipeline (planner → researcher
 | `contradicted` | Code directly disproves the claim |
 | `unsupported` | No evidence in the repo — enforced in code, not delegated to the LLM |
 
-The pipeline is planner (LLM extracts claims) → researcher (deterministic grep via `LocalRepoAdapter`) → checker (LLM judges + trust gate forces `unsupported` when evidence is empty) → critic (adversarial pass). The audited README is excluded from its own evidence pool, so fabricated claims cannot verify themselves.
+Both auditors use the same pipeline: planner (LLM extracts claims) → researcher (deterministic grep via a `SourceAdapter` — `LocalRepoAdapter` for repos, `GitHubAdapter` for PR diffs) → checker (LLM judges + trust gate forces `unsupported` when evidence is empty) → critic (adversarial pass). The audited artefact is excluded from its own evidence pool, so fabricated claims cannot verify themselves.
 
-Roadmap for this track: PR auditor (PR description vs. diff), compliance auditor (security/policy claims vs. code), architecture auditor (design doc vs. implementation). See [AGENTS.md](AGENTS.md) for the contributor recipe.
+`audit pr` reads `GITHUB_TOKEN` or `GH_TOKEN` for higher rate limits; offline testing uses canned fixtures via `--fixture <dir>` (see `tests/fixtures/sample_pr/`).
+
+Roadmap for this track: compliance auditor (security/policy claims vs. code), architecture auditor (design doc vs. implementation), layered source adapters (specs / RFCs / dependency source), tool/source registry, Ollama for local inference on private repos. See [AGENTS.md](AGENTS.md) for the contributor recipe.
 
 ## What it does
 

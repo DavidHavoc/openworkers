@@ -18,24 +18,29 @@ core/
   blackboard/        # Redis-backed shared state (thesis-only for now)
   orchestrator/
     thesis_flow.py   # ThesisOrchestrator — legacy, do not break
-    readme_flow.py   # ReadmeAuditOrchestrator — new code-audit slice
+    readme_flow.py   # ReadmeAuditOrchestrator — README slice
+    pr_flow.py       # PrAuditOrchestrator — PR slice
+    audit_prompts.py # Shared template loader for all audit prompts
     compiler.py      # PromptCompiler for thesis (blackboard → prompt vars)
   router/            # Provider tier routing (quality/balanced/cheap)
   memory/episodic.py # Qdrant episodic memory (thesis)
   schemas.py         # Thesis Pydantic models
-  schemas_audit.py   # Code-audit Pydantic models (kept separate on purpose)
+  schemas_audit.py   # Code-audit Pydantic models (AuditClaim aliases ReadmeClaim)
   sources/
     base.py          # SourceAdapter ABC — the new evidence-backend contract
     local_repo.py    # LocalRepoAdapter — grep over a local repo
+    github.py        # GitHubAdapter (over PR diff) + PrSpec + live fetcher
 providers/
   unified.py         # UnifiedLLM: provider fallback, breakers, DRY_RUN path
   thesis_agents.py   # Thesis agent suite — untouched, keep passing
-  code_audit_agents.py # README planner, checker, critic + trust gate
+  code_audit_agents.py # README + PR planners/checkers + trust gate + critic
   budget.py          # BudgetGuard (contextvars-scoped session ceiling)
   resilience.py      # Tenacity + pybreaker glue
 prompts/
-  *.md               # Thesis templates (head_planner, specialist_*, ...)
-  code_audit/*.md    # Audit templates (readme_planner, readme_checker, ...)
+  *.md                       # Thesis templates (head_planner, specialist_*, ...)
+  code_audit/readme_*.md     # README auditor templates
+  code_audit/pr_*.md         # PR auditor templates
+  code_audit/audit_critic.md # Shared critic template (used by both)
 tools/mcp/           # Literature MCP tools; will migrate behind SourceAdapter
 apps/
   cli/main.py        # Single argparse CLI for both `thesis ...` and `audit ...`
@@ -65,7 +70,18 @@ This overwrites whatever the LLM said. A confidently hallucinating checker that 
 
 Mirror this pattern when you add new auditors (PR auditor, compliance auditor, etc.): keep the LLM creative, but enforce the trust invariant in Python.
 
-## The README-audit flow (current slice)
+## Shared audit pipeline (README and PR slices)
+
+Both auditors follow the same four-stage shape, parameterised by adapter and prompts:
+
+1. **Planner (LLM)** — extracts atomic factual claims as `AuditClaim` (alias of `ReadmeClaim`). The README planner reads `claim_type ∈ {feature, install, usage, requirement, metric, api, other}`; the PR planner reads `claim_type ∈ {add, remove, fix, refactor, test, behavior, doc, other}`. Same schema, domain-specific enums in the prompt.
+2. **Researcher (deterministic Python)** — runs `adapter.search_any(claim.search_hints, limit=N)` over whichever `SourceAdapter` the orchestrator is bound to. README slice uses `LocalRepoAdapter`; PR slice uses `GitHubAdapter`. Adapters never call an LLM and never reach the network at audit time (the PR adapter does its fetch ahead, returning a `PrSpec`).
+3. **Checker (LLM + trust gate)** — judges each `(claim, evidence)` pair. Trust gate runs after the LLM responds.
+4. **Critic (LLM)** — adversarial pass. `AuditCriticAgent` is shared across slices.
+
+`core/orchestrator/audit_prompts.py` holds the template registry — adding a new auditor just means registering its prompts there. `core/schemas_audit.py` exposes `AuditClaim` / `AuditClaimList` as aliases of the (legacy-named) `ReadmeClaim` / `ReadmeClaimList`. Rename can happen when the third auditor lands; until then the alias keeps PR code readable.
+
+## The README-audit flow (slice 1)
 
 1. **Planner (LLM)** — reads the README, extracts atomic factual claims with verbatim quotes + grep-friendly search hints. Schema: `ReadmeClaimList`.
 2. **Researcher (deterministic Python)** — uses `LocalRepoAdapter.search_any(hints)` to retrieve evidence snippets from the repo. **No LLM call here** — it's just a filesystem grep with safety rails (path traversal guard, file-size cap, dir excludes).
@@ -73,6 +89,13 @@ Mirror this pattern when you add new auditors (PR auditor, compliance auditor, e
 4. **Critic (LLM)** — adversarial pass: weak verdicts, missed claims, suggestions.
 
 The audited README is **excluded** from its own evidence pool — otherwise every fabricated claim could "verify itself" against the README quote. See `ReadmeAuditOrchestrator.audit` for the exclusion logic.
+
+## The PR-audit flow (slice 2)
+
+1. **Fetcher** — `fetch_pr_from_github(url, token)` hits the GitHub REST API for PR metadata + unified diff + changed files, returning a `PrSpec`. Tests skip this and use `load_pr_fixture(directory)` to build `PrSpec` from `pr.json` + `diff.patch`. Anonymous requests work for public repos but hit the 60/hour rate limit fast; pass a token explicitly or via `GITHUB_TOKEN` / `GH_TOKEN`.
+2. **Adapter** — `GitHubAdapter(pr_spec)` parses the diff once into `DiffHunk` objects (path + new-file line offset + hunk text). `search_any(terms)` greps hunk bodies, stripping the leading `+`/`-`/space marker before matching so a hint of `+` doesn't spuriously match every added line. One hit per hunk to avoid duplicate snippets.
+3. **Planner / Checker** — `PrPlannerAgent` + `PrCheckerAgent` mirror their README cousins but use PR-specific prompts. The checker's prompt instructs it to interpret `+` lines as additions, `-` as removals — semantic decisions live in the prompt; mechanical retrieval stays in the adapter.
+4. **No artefact-exclusion needed** — the PR description is never part of the diff, so the self-evidence problem doesn't arise here. Different shape from README, same trust invariant.
 
 ## Coexistence rules
 
@@ -100,7 +123,8 @@ The audited README is **excluded** from its own evidence pool — otherwise ever
 See `ROADMAP.md` for the full picture. Short version:
 
 - ✅ Slice 1 (shipped): README auditor.
-- 🚧 Next slices: PR auditor (`audit pr <url>`), compliance auditor, architecture auditor. All slot in behind the same `SourceAdapter` + agent-suite + trust-gate pattern.
+- ✅ Slice 2 (shipped): PR auditor (`audit pr <url>`).
+- 🚧 Next slices: compliance auditor, architecture auditor. All slot in behind the same `SourceAdapter` + agent-suite + trust-gate pattern.
 - 🚧 Layered source adapters: repo (highest trust) → language specs / RFCs → dependency source. The literature MCP tools will migrate behind the same contract.
 - 🚧 Cherry-picked from the v1.0 plan: tool/source registry, light provider-registry abstraction (Ollama later for local inference on private repos), structlog audit trail.
 - ⏸️ Deferred: PyPI packaging, Typer CLI rewrite, OTel, Smart truncation, Ollama. Not blocking the audit-track expansion.

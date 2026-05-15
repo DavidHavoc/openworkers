@@ -9,6 +9,7 @@ from apps.shared.formatting import (
     format_session_text,
 )
 from core.memory.episodic import EpisodicMemory
+from core.orchestrator.pr_flow import PrAuditOrchestrator, format_pr_report_text
 from core.orchestrator.readme_flow import ReadmeAuditOrchestrator, format_report_text
 from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
@@ -235,7 +236,30 @@ async def cmd_audit_dispatch(args):
     """Route `audit <subcommand>` to its handler."""
     if args.audit_action == "readme":
         return await cmd_audit_readme(args)
+    if args.audit_action == "pr":
+        return await cmd_audit_pr(args)
     raise SystemExit(f"Unknown audit action: {args.audit_action}")
+
+
+async def cmd_audit_pr(args):
+    """Run the PR auditor against a GitHub PR URL (or a local fixture dir)."""
+    from core.sources.github import fetch_pr_from_github, load_pr_fixture
+
+    unified = create_unified_llm()
+    orch = PrAuditOrchestrator(unified=unified)
+
+    if args.fixture:
+        pr_spec = load_pr_fixture(args.fixture)
+    else:
+        pr_spec = await asyncio.to_thread(fetch_pr_from_github, args.url, args.token)
+
+    report, critique = await orch.audit(pr_spec)
+    if args.format == "json":
+        payload = {"report": report.model_dump(), "critique": critique.model_dump()}
+        _output(payload, "json", args.output)
+    else:
+        _output(format_pr_report_text(report, critique), "text", args.output)
+    return report
 
 
 async def cmd_audit_readme(args):
@@ -398,6 +422,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit README path (default: auto-discover under <repo>)",
     )
     add_output_args(p_audit_readme)
+
+    p_audit_pr = audit_sub.add_parser(
+        "pr",
+        help="Verify a PR description against the actual diff",
+    )
+    p_audit_pr.add_argument(
+        "url",
+        type=str,
+        nargs="?",
+        default="",
+        help="GitHub PR URL (https://github.com/owner/repo/pull/N)",
+    )
+    p_audit_pr.add_argument(
+        "--fixture",
+        type=str,
+        default=None,
+        help="Audit a fixture directory containing pr.json + diff.patch instead of hitting GitHub",
+    )
+    p_audit_pr.add_argument(
+        "--token",
+        type=str,
+        default=None,
+        help="GitHub token (default: $GITHUB_TOKEN or $GH_TOKEN)",
+    )
+    add_output_args(p_audit_pr)
 
     p_ingest = sub.add_parser("ingest", help="Manage user RAG collections (PDF/text -> Qdrant)")
     ingest_sub = p_ingest.add_subparsers(dest="ingest_action", required=True)
