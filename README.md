@@ -6,84 +6,13 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Lint: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-A multi-agent system that **refuses to make things up**. Two domains live here today:
+**The multi-agent system that refuses to make things up.**
 
-- **Thesis assistant** — audits literature claims against arXiv / Semantic Scholar / CrossRef.
-- **Code audit** *(new flagship, in progress)* — audits factual claims in technical artefacts (READMEs first, then PRs / compliance docs / architecture docs) against the actual codebase, language specs, and dependencies.
+Every claim the system emits is either tied to a verifiable primary source or marked as unsupported. Two domains run in this codebase: a **code auditor** that verdicts factual claims in technical artefacts against the actual codebase, and a **thesis assistant** that audits literature claims against academic sources. Same DNA — planner → researcher → checker → critic, structured JSON everywhere, a hard trust gate enforced in code.
 
-Both domains share the same DNA: a hierarchical pipeline (planner → researcher → checker → critic) producing structured JSON, with provider-agnostic LLM routing across Anthropic, OpenAI, and DeepSeek and a hard trust gate that **refuses to verdict without evidence**.
+---
 
-> **Project status:** 0.1.0 (pre-release). The thesis pipeline runs end-to-end; the code-audit track has landed its first slice (`openworkers audit readme <repo>`). APIs may shift before 1.0. See [ROADMAP.md](ROADMAP.md) for direction, [AGENTS.md](AGENTS.md) for contributor context.
-
-## Code audit *(new track)*
-
-`openworkers audit readme <repo>` and `openworkers audit pr <github-pr-url>` extract every factual claim from a README or PR description and verdict each one against the actual repository / diff:
-
-| Verdict | Meaning |
-|---|---|
-| `verified` | Code clearly demonstrates the claim is true |
-| `drifted` | A related but divergent implementation exists (renamed flag, changed default, etc.) |
-| `contradicted` | Code directly disproves the claim |
-| `unsupported` | No evidence in the repo — enforced in code, not delegated to the LLM |
-
-Both auditors use the same pipeline: planner (LLM extracts claims) → researcher (deterministic grep via a `SourceAdapter` — `LocalRepoAdapter` for repos, `GitHubAdapter` for PR diffs) → checker (LLM judges + trust gate forces `unsupported` when evidence is empty) → critic (adversarial pass). The audited artefact is excluded from its own evidence pool, so fabricated claims cannot verify themselves.
-
-`audit pr` reads `GITHUB_TOKEN` or `GH_TOKEN` for higher rate limits; offline testing uses canned fixtures via `--fixture <dir>` (see `tests/fixtures/sample_pr/`).
-
-Roadmap for this track: compliance auditor (security/policy claims vs. code), architecture auditor (design doc vs. implementation), layered source adapters (specs / RFCs / dependency source), tool/source registry, Ollama for local inference on private repos. See [AGENTS.md](AGENTS.md) for the contributor recipe.
-
-## What it does
-
-| # | Capability | Notes |
-|---|-----------|-------|
-| 1 | **Literature Map** | arXiv + Semantic Scholar; classifies results as supporting / challenging / adjacent |
-| 2 | **Citation Audit** | Flags missing, weak, contested citations across the lit set |
-| 3 | **Synthesis Report** | Methods, datasets, metrics; cross-paper comparisons |
-| 4 | **Structured Critique** | Strengths, weaknesses, gaps, counterarguments, suggestions — JSON, never prose |
-| 5 | **Corpus Benchmarks** | Ingest thesis PDFs; compare your section length and citation density to a reference corpus |
-| 6 | **Idea/Draft Critique** | Standalone critique without running a full pipeline |
-| 7 | **Citation Verification** | DOI lookup via CrossRef; returns metadata or reports it does not exist |
-| 8 | **Quick Paper Search** | arXiv / Semantic Scholar by keyword — no LLM, no token cost |
-| 9 | **Session Persistence** | Resume past sessions; list and filter by discipline/status (Redis or Postgres) |
-| 10 | **Multi-Provider Router** | quality / balanced / cheap tiers with health checks, fallback chains, budget tracking |
-| 11 | **Privacy Tiers** | public / sanitized / trusted gate which data sources each agent can access |
-| 12 | **JSON Output** | Every command supports `--format json` and `--output file.json` |
-| 13 | **MCP Server** | Four tools over stdio for Claude Code, OpenCode, and any MCP-aware client |
-| 14 | **Evaluation Harness** | Built-in tests for routing correctness, search recall, fake-DOI detection |
-| 15 | **Dockerized** | Compose stack with Redis, Qdrant, CLI runner, and MCP service |
-| 16 | **User RAG over PDFs** | `thesis ingest add paper.pdf --collection my_papers` chunks + embeds; researcher transparently retrieves alongside arXiv/SS via `thesis research ... --rag-collection my_papers` |
-
-## Architecture
-
-```mermaid
-flowchart LR
-    User([CLI / MCP / FastAPI]) --> Orch[Thesis Orchestrator]
-    Orch --> Plan[HEAD Planner]
-    Plan --> Res[Researcher]
-    Res --> arXiv[arXiv]
-    Res --> SS[Semantic Scholar]
-    Res --> BB[(Blackboard<br/>Redis)]
-    Plan -.-> BB
-    BB --> Check[Checker]
-    Check --> XR[CrossRef]
-    Check --> BB
-    BB --> Synth[Synthesizer]
-    Synth --> BB
-    BB --> Crit[Critic]
-    Crit --> BB
-    BB --> Sup[HEAD Supervisor]
-    Sup --> Out[ResearchSession]
-    Orch -.->|every LLM call| Router[UnifiedLLM<br/>quality / balanced / cheap]
-    Router --> Anthropic & OpenAI & DeepSeek
-    Sup -.-> Mem[(Episodic Memory<br/>Qdrant)]
-    Out -.-> Store[(Session Store<br/>Redis or Postgres)]
-```
-
-Full pipeline-stage table and routing detail in [docs/architecture.md](docs/architecture.md).
-
-## Install
-
-Python 3.12 is recommended (the test matrix runs 3.9 and 3.12). Redis is required at runtime; Qdrant runs embedded by default.
+## Quick start
 
 ```bash
 git clone https://github.com/DavidHavoc/openworkers.git
@@ -92,9 +21,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Configure
-
-Copy `.env.example` to `.env` and pick **one** provider configuration. A minimal single-provider setup:
+Copy `.env.example` to `.env`, add at least one API key, and pick a provider:
 
 ```env
 DEEPSEEK_API_KEY=sk-...
@@ -107,46 +34,198 @@ THESIS_CHEAP_MODEL=deepseek-chat
 DRY_RUN=false
 ```
 
-The three modes route different agents to different models so you can pay strong-model rates only where they matter:
+## Code audit
 
-| Mode | Used by | Suggested model class |
-|------|---------|-----------------------|
-| `quality` | HEAD planner, HEAD supervisor, critic | strongest |
-| `balanced` | checker, synthesizer | mid |
-| `cheap` | researcher | cheap / fast |
+Audit factual claims in READMEs and pull requests against the codebase. Every claim gets one of four verdicts:
 
-`DRY_RUN=true` runs the full pipeline without any API keys — useful for tests, demos, and CI.
+| Verdict | Meaning |
+|---|---|
+| `verified` | Code clearly demonstrates the claim is true |
+| `drifted` | A related but divergent implementation exists (renamed flag, changed default, etc.) |
+| `contradicted` | Code directly disproves the claim |
+| `unsupported` | No evidence in the repo — enforced in Python, not delegated to the LLM |
 
-## Docker
+### Audit a README
 
 ```bash
-docker compose build
-docker compose up -d redis qdrant
-docker compose run --rm cli python -m apps.cli.main research "your question"
+openworkers audit readme /path/to/any/repo
 ```
 
-`cli` and `mcp` services live behind the `tools` profile and start on demand. `.env` is mounted automatically.
+Example output (synthetic widgetlib):
 
-## CLI
+```json
+{
+  "claims": [
+    {
+      "text": "WidgetLib supports both synchronous and asynchronous widget creation.",
+      "quote": "Create widgets via WidgetFactory synchronously or with WidgetFactoryAsync.",
+      "claim_type": "feature",
+      "verdict": "verified",
+      "confidence": 0.92,
+      "evidence_paths": ["widgetlib/factory.py:30-42"]
+    },
+    {
+      "text": "The default widget timeout is 30 seconds.",
+      "quote": "Time out after 30 seconds.",
+      "claim_type": "feature",
+      "verdict": "drifted",
+      "confidence": 0.78,
+      "evidence_paths": ["widgetlib/config.py:12"],
+      "notes": "Default is 45 seconds in code; 30 was the v0.1 value."
+    },
+    {
+      "text": "Built-in PostgreSQL support.",
+      "quote": "WidgetLib includes native PostgreSQL support.",
+      "claim_type": "feature",
+      "verdict": "unsupported",
+      "confidence": 0.0,
+      "evidence_paths": [],
+      "notes": "No supporting evidence found in the repository."
+    }
+  ],
+  "critique": {
+    "weak_verdicts": ["timeout claim — grep for '30' only; the 45-second constant uses a different syntax"],
+    "missed_claims": ["README mentions 'rate limiting' but planner didn't extract it"],
+    "suggestions": ["Re-run with expanded search hints for timeout-related constants"]
+  }
+}
+```
+
+The audited README is excluded from its own evidence pool — claims cannot verify themselves against the text that makes them.
+
+### Audit a pull request
+
+```bash
+openworkers audit pr https://github.com/owner/repo/pull/42
+```
+
+Uses `GITHUB_TOKEN` or `GH_TOKEN` for higher rate limits (anonymous works for public repos at 60 req/hour). The PR description is extracted by the planner; the unified diff is the evidence pool. Claims have PR-specific types: `add`, `remove`, `fix`, `refactor`, `test`, `behavior`, `doc`, `other`. See `tests/fixtures/sample_pr/` for a canned example.
+
+### How the audit pipeline works
+
+Both README and PR auditors share the same four-stage shape, parameterised by source adapter and prompts:
+
+```
+Planner (LLM)              extracts atomic claims from the artefact
+    ↓
+Researcher (Python)        deterministic grep over the codebase via SourceAdapter
+    ↓
+Checker (LLM + trust gate) judges each (claim, evidence) pair; trust gate overwrites
+                           any verdict where evidence is empty — in code, not prompts
+    ↓
+Critic (LLM)               adversarial pass: weak verdicts, missed claims, suggestions
+```
+
+The trust gate (`providers/code_audit_agents.py::_enforce_trust_gate`) is the invariant. A confidently hallucinating checker that says `verified` for a claim with zero evidence gets corrected before the user ever sees the report. See [AGENTS.md](AGENTS.md) for the contributor recipe and [ROADMAP.md](ROADMAP.md) for upcoming slices (compliance auditor, architecture auditor, layered source adapters).
+
+## Thesis assistant (legacy)
+
+Audits literature claims against arXiv, Semantic Scholar, and CrossRef. Produces structured JSON — writing prose is explicitly out of scope. This pipeline is stable and maintained, but code audit is the new flagship.
 
 ```bash
 thesis research "Can light replace electrons in CPUs?" --discipline computer_science
-thesis research "..." --rag-collection my_papers   # also retrieve from your own PDFs
 thesis critique "Social media causes depression because teens spend too much time online"
 thesis verify "10.1038/nature14539"
 thesis papers "transformer attention" --source arxiv --limit 5
 thesis corpus thesis.pdf --title "My Thesis" --discipline cs --year 2024
-thesis ingest add paper.pdf --collection my_papers   # add to your RAG corpus
-thesis ingest list
+thesis ingest add paper.pdf --collection my_papers   # RAG over your own PDFs
 thesis sessions
 thesis resume <session-id>
 ```
 
-Every command accepts `--format json` and `--output path/to/file.json`. See [docs/examples.md](docs/examples.md) for full sample outputs.
+Every command accepts `--format json` and `--output path/to/file.json`. Output examples in [docs/examples.md](docs/examples.md).
 
-## MCP Server (Claude Code, OpenCode, and other MCP clients)
+### What the thesis assistant does
 
-The server exposes four tools over stdio: `thesis_research`, `thesis_critique`, `thesis_verify_citation`, `thesis_search_papers`.
+| # | Capability | Description |
+|---|-----------|-------------|
+| 1 | Literature map | arXiv + Semantic Scholar; classified as supporting / challenging / adjacent |
+| 2 | Citation audit | Flags missing, weak, contested citations across the lit set |
+| 3 | Synthesis report | Methods, datasets, metrics; cross-paper comparisons |
+| 4 | Structured critique | Strengths, weaknesses, gaps, counterarguments — JSON, never prose |
+| 5 | Corpus benchmarks | Compare section length and citation density to reference corpus from your PDFs |
+| 6 | Idea/draft critique | Standalone critique without running the full pipeline |
+| 7 | Citation verification | DOI lookup via CrossRef; returns metadata or reports it does not exist |
+| 8 | Quick paper search | arXiv / Semantic Scholar by keyword — no LLM, no token cost |
+| 9 | Session persistence | Resume past sessions; list and filter by discipline/status (Redis or Postgres) |
+| 10 | User RAG over PDFs | Ingest your own PDFs; researcher retrieves from them alongside arXiv/SS |
+
+## LLM routing
+
+`UnifiedLLM` routes to Anthropic, OpenAI, and DeepSeek across three tiers:
+
+| Tier | Used by | Suggested model |
+|------|---------|-----------------|
+| `quality` | HEAD planner, HEAD supervisor, critic | strongest |
+| `balanced` | checker, synthesizer | mid |
+| `cheap` | researcher | cheap / fast |
+
+Per-provider circuit breakers (pybreaker), tenacity retries with exponential jitter, and a hard budget guard (contextvars-scoped per-session ceiling) keep the system resilient. `DRY_RUN=true` runs the full pipeline without any API keys — useful for CI and wiring tests.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    User([CLI / MCP / FastAPI])
+
+    subgraph Audit["Code Audit (flagship)"]
+        direction LR
+        AuditCLI["audit readme / audit pr"]
+        AuditOrch[AuditOrchestrator]
+        AuditCLI --> AuditOrch
+    end
+
+    subgraph Thesis["Thesis Assistant (legacy)"]
+        direction LR
+        ThesisCLI[thesis research / critique / verify]
+        ThesisOrch[ThesisOrchestrator]
+        ThesisCLI --> ThesisOrch
+    end
+
+    User --> Audit
+    User --> Thesis
+
+    subgraph Pipeline["Shared Pipeline"]
+        Planner[Planner<br/>LLM] --> Researcher[Researcher<br/>Python]
+        Researcher --> Checker[Checker<br/>LLM + Trust Gate]
+        Checker --> Critic[Critic<br/>LLM]
+    end
+
+    subgraph Sources["Evidence Sources"]
+        arXiv[arXiv]
+        SS[Semantic Scholar]
+        CrossRef[CrossRef]
+        LocalRepo["LocalRepoAdapter<br/>grep over repo"]
+        GitHub["GitHubAdapter<br/>grep over PR diff"]
+    end
+
+    AuditOrch --> Pipeline
+    ThesisOrch --> Pipeline
+    Researcher --> LocalRepo & GitHub & arXiv & SS
+    Checker --> CrossRef & arXiv & LocalRepo
+
+    subgraph Infra["Infrastructure"]
+        Router["UnifiedLLM<br/>Anthropic / OpenAI / DeepSeek"]
+        BB[(Blackboard<br/>Redis)]
+        Mem[(Episodic Memory<br/>Qdrant)]
+    end
+
+    Pipeline --> Router
+    ThesisOrch --> BB & Mem
+```
+
+Full detail in [docs/architecture.md](docs/architecture.md).
+
+## MCP server
+
+Exposes four thesis tools over stdio for Claude Code, OpenCode, and any MCP-aware client:
+
+| Tool | Description |
+|------|-------------|
+| `thesis_research` | Run the full research pipeline |
+| `thesis_critique` | Critique an idea or draft |
+| `thesis_verify_citation` | Look up a DOI via CrossRef |
+| `thesis_search_papers` | Quick arXiv / Semantic Scholar keyword search |
 
 **Claude Code** — add to `~/.claude/mcp.json` or a project-level `.mcp.json`:
 
@@ -177,26 +256,49 @@ The server exposes four tools over stdio: `thesis_research`, `thesis_critique`, 
 }
 ```
 
-Replace `/absolute/path/to/openworkers` with your local checkout path. Conversation examples live in [docs/examples.md](docs/examples.md).
+Replace `/absolute/path/to/openworkers` with your local checkout path.
 
-## How OpenWorkers compares
+## Docker
 
-OpenWorkers is for *researching* a thesis, not writing one. The closest analogues are research-discovery tools, not generic chat:
+```bash
+docker compose build
+docker compose up -d redis qdrant
+docker compose run --rm cli python -m apps.cli.main research "your question"
+```
 
-| Capability                          | OpenWorkers | Generic LLM Chat | Elicit | scite | Connected Papers |
-|-------------------------------------|:-----------:|:----------------:|:------:|:-----:|:----------------:|
-| Refuses to write prose for you      | ✅          | ❌               | partial| n/a   | n/a              |
-| arXiv + Semantic Scholar search     | ✅          | ❌               | ✅     | ✅    | ✅               |
-| CrossRef DOI verification           | ✅          | ❌               | partial| ✅    | ❌               |
-| Structured critique (JSON schema)   | ✅          | ❌               | ❌     | ❌    | ❌               |
-| Corpus benchmarking from your PDFs  | ✅          | ❌               | ❌     | ❌    | ❌               |
-| Multi-provider LLM routing          | ✅          | ❌               | ❌     | ❌    | ❌               |
-| MCP / editor integration            | ✅          | n/a              | ❌     | ❌    | ❌               |
-| Self-hostable, MIT-licensed         | ✅          | ❌               | ❌     | ❌    | ❌               |
+`cli` and `mcp` services live behind the `tools` profile and start on demand. `.env` is mounted automatically.
+
+## FastAPI
+
+Start the async HTTP interface:
+
+```bash
+uvicorn apps.api.main:app --reload
+```
+
+Interactive docs at `http://localhost:8000/docs`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/tasks/` | Submit a research task → `{task_id, status: "queued"}` |
+| `GET` | `/tasks/` | List all tasks |
+| `GET` | `/tasks/{task_id}` | Poll task status and result |
+| `DELETE` | `/tasks/{task_id}` | Remove a completed or failed task |
+
+```bash
+# Submit
+curl -s -X POST http://localhost:8000/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Does retrieval-augmented generation improve factuality?", "discipline": "computer_science"}'
+
+# Poll
+curl -s http://localhost:8000/tasks/abc-123 | jq '.status'
+```
+
+---
 
 ## Contributing
-
-Bug fixes, docs, features, and provider integrations welcome. Before opening a PR, run:
 
 ```bash
 pytest tests/ -v
@@ -204,57 +306,8 @@ ruff check . && black --check .
 mypy core/ providers/ --strict --ignore-missing-imports
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+Read [AGENTS.md](AGENTS.md) before touching code. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ## License
 
-[MIT](LICENSE-MIT).
-
-## FastAPI app
-
-The FastAPI app (`apps/api/main.py`) provides an async HTTP interface for programmatic access. Start it with:
-
-```bash
-uvicorn apps.api.main:app --reload
-# or
-make dev
-```
-
-The server starts on `http://localhost:8000` by default. Interactive docs are available at `http://localhost:8000/docs`.
-
-### Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check — returns status and pending task count |
-| `POST` | `/tasks/` | Submit a research task (returns `task_id`, status `202`) |
-| `GET` | `/tasks/` | List all tasks with their current status |
-| `GET` | `/tasks/{task_id}` | Poll a task for status and result |
-| `DELETE` | `/tasks/{task_id}` | Remove a completed or failed task |
-
-### Example: submit and poll a task
-
-```bash
-# Submit
-curl -s -X POST http://localhost:8000/tasks/ \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Does retrieval-augmented generation improve factuality?", "discipline": "computer_science", "mode": "balanced"}' \
-| jq .
-# {"task_id": "abc-123", "status": "queued", "created_at": "..."}
-
-# Poll until complete
-curl -s http://localhost:8000/tasks/abc-123 | jq '.status'
-```
-
-**Request fields:**
-
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `query` | yes | — | Research question to investigate |
-| `discipline` | no | `general` | Subject area (e.g. `computer_science`, `psychology`) |
-| `topic_summary` | no | same as `query` | One-sentence context for the planner |
-| `existing_knowledge` | no | `""` | What the user already knows |
-| `what_they_need` | no | `""` | Specific output they are looking for |
-| `mode` | no | `balanced` | LLM tier to use: `quality`, `balanced`, or `cheap` |
-
-Tasks run asynchronously in the background. Poll `GET /tasks/{task_id}` until `status` is `complete` or `failed`. The `result` field contains a full `ResearchSession` object in the same shape as the CLI JSON output.
+[MIT](LICENSE-MIT)
