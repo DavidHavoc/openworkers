@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # ── embedding cache ─────────────────────────────────────────────────
     embedding_cache_dir: str = ""
 
+    # ── API rate limiting ───────────────────────────────────────────────
+    api_rate_limit_enabled: bool = True
+    api_rate_limit_requests_per_minute: int = 60
+    api_rate_limit_requests_per_hour: int = 1000
+    api_rate_limit_cleanup_interval_sec: int = 300
+
     @field_validator("max_budget_usd", mode="before")
     @classmethod
     def _coerce_budget(cls, v: Any) -> Optional[float]:

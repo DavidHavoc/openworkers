@@ -276,6 +276,8 @@ Start the async HTTP interface:
 uvicorn apps.api.main:app --reload
 ```
 
+Per-IP rate limiting is enabled by default (60 req/min, 1000 req/hour). Configure via `API_RATE_LIMIT_*` env vars or set `API_RATE_LIMIT_ENABLED=false` to disable.
+
 Interactive docs at `http://localhost:8000/docs`.
 
 | Method | Path | Description |

@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from apps.api.rate_limit import IPRateLimitMiddleware
 from core.logging import configure_logging
 from core.memory.episodic import EpisodicMemory
 from core.orchestrator.thesis_flow import ThesisOrchestrator
@@ -25,6 +26,8 @@ app = FastAPI(
     description="Research-focused hierarchical multi-agent system",
     version="0.2.0",
 )
+
+app.add_middleware(IPRateLimitMiddleware)
 
 _MAX_TASKS = 1000
 
