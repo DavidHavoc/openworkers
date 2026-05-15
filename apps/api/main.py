@@ -1,10 +1,14 @@
 import asyncio
 import logging
+import os
+import threading
+import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from core.memory.episodic import EpisodicMemory
@@ -25,6 +29,75 @@ app = FastAPI(
 
 # In-memory task store: task_id -> {status, result, error, created_at}
 _tasks: Dict[str, Dict[str, Any]] = {}
+
+
+class RateLimiter:
+    def __init__(self, max_requests: int = 10, window_seconds: float = 60.0):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._windows: dict[str, list[float]] = defaultdict(list)
+        self._lock = threading.Lock()
+        self._last_cleanup = time.monotonic()
+
+    @staticmethod
+    def _get_ip(request: Request) -> str:
+        forwarded = request.headers.get("X-Forwarded-For")
+        return forwarded.split(",")[0].strip() if forwarded else (
+            request.client.host if request.client else "unknown"
+        )
+
+    def _cleanup(self, now: float) -> None:
+        if now - self._last_cleanup < 60.0:
+            return
+        self._last_cleanup = now
+        cutoff = now - self.window_seconds
+        for ip in list(self._windows):
+            self._windows[ip] = [t for t in self._windows[ip] if t >= cutoff]
+            if not self._windows[ip]:
+                del self._windows[ip]
+
+    def lookup(self, request: Request) -> dict[str, int]:
+        ip = self._get_ip(request)
+        now = time.monotonic()
+        with self._lock:
+            cutoff = now - self.window_seconds
+            timestamps = [t for t in self._windows.get(ip, []) if t >= cutoff]
+        return {
+            "current": len(timestamps),
+            "limit": self.max_requests,
+            "remaining": max(0, self.max_requests - len(timestamps)),
+        }
+
+    def __call__(self, request: Request, response: Response):
+        ip = self._get_ip(request)
+        now = time.monotonic()
+        with self._lock:
+            self._cleanup(now)
+            cutoff = now - self.window_seconds
+            self._windows[ip] = [t for t in self._windows[ip] if t >= cutoff]
+            current = len(self._windows[ip])
+            if current >= self.max_requests:
+                reset_in = max(0.0, self._windows[ip][0] + self.window_seconds - now)
+                response.headers["X-RateLimit-Remaining"] = "0"
+                response.headers["X-RateLimit-Reset"] = str(round(reset_in, 1))
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "Too Many Requests",
+                        "retry_after_seconds": round(reset_in, 1),
+                    },
+                )
+            self._windows[ip].append(now)
+            remaining = self.max_requests - (current + 1)
+            reset_in = max(0.0, self._windows[ip][0] + self.window_seconds - now)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+            response.headers["X-RateLimit-Reset"] = str(round(reset_in, 1))
+
+
+_rate_limiter = RateLimiter(
+    max_requests=int(os.getenv("RATELIMIT_MAX_REQUESTS", "10")),
+    window_seconds=float(os.getenv("RATELIMIT_WINDOW_SECONDS", "60")),
+)
 
 
 class TaskRequest(BaseModel):
@@ -89,12 +162,18 @@ async def _run_task(task_id: str, request: TaskRequest) -> None:
 
 
 @app.get("/health")
-async def health_check():
-    return {"status": "ok", "tier": "api-gateway", "pending_tasks": len(_tasks)}
+async def health_check(request: Request):
+    rl = _rate_limiter.lookup(request)
+    return {
+        "status": "ok",
+        "tier": "api-gateway",
+        "pending_tasks": len(_tasks),
+        "rate_limit": rl,
+    }
 
 
 @app.post("/tasks/", response_model=TaskResponse, status_code=202)
-async def submit_task(request: TaskRequest):
+async def submit_task(request: TaskRequest, _rip: str = Depends(_rate_limiter)):
     task_id = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
     _tasks[task_id] = {
