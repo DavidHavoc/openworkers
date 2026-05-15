@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "AuditCriticAgent",
+    "PrCheckerAgent",
+    "PrPlannerAgent",
     "ReadmeCheckerAgent",
     "ReadmePlannerAgent",
     "_schema_for",
@@ -377,3 +379,120 @@ class AuditCriticAgent:
 
 def new_claim_id() -> str:
     return f"claim-{uuid.uuid4().hex[:8]}"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# PR-audit agents
+#
+# Parallel to the README ones rather than a shared base class: per
+# AGENTS.md, two examples is not yet a pattern. When the third auditor
+# (compliance) lands, ``ClaimPlannerAgent`` / ``ClaimCheckerAgent`` can
+# absorb both — but premature extraction here would commit us to an
+# interface we'd inevitably regret.
+# ──────────────────────────────────────────────────────────────────────
+
+
+class PrPlannerAgent:
+    """Extracts atomic factual claims from a PR title + body."""
+
+    def __init__(self, unified: UnifiedLLM, prompt_renderer: Callable[[str, dict[str, Any]], str]):
+        self.unified = unified
+        self.render = prompt_renderer
+
+    async def execute(
+        self,
+        pr_description: str,
+        pr_url: str = "",
+        changed_files: list[str] | None = None,
+    ) -> dict[str, Any]:
+        changed_files = changed_files or []
+        system_prompt = self.render(
+            "pr_planner",
+            {"pr_url": pr_url, "files_changed": ", ".join(changed_files[:25])},
+        )
+        user_prompt = (
+            "Extract every atomic factual claim from the PR description below. "
+            "Return a JSON object matching the ReadmeClaimList schema (same shape, "
+            "claim_type drawn from add | remove | fix | refactor | test | behavior | "
+            "doc | other).\n\n"
+            f"PR URL: {pr_url}\n"
+            f"Changed files ({len(changed_files)}): "
+            f"{', '.join(changed_files[:25]) if changed_files else '(none)'}\n\n"
+            "---BEGIN PR DESCRIPTION---\n"
+            f"{pr_description}\n"
+            "---END PR DESCRIPTION---"
+        )
+        response = await self.unified.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            mode="quality",
+            response_schema=_schema_for(ReadmeClaimList),
+        )
+        parsed = _parse_structured(response.content, ReadmeClaimList)
+        parsed = _normalise_claim_list(parsed, pr_url)
+        return {
+            "agent": "pr_planner",
+            "tier": "head",
+            "status": "success",
+            "output": parsed,
+            "provider": response.provider_used,
+            "model": response.model,
+            "latency_ms": response.latency_ms,
+            "cost_estimate_usd": response.cost_estimate_usd,
+            "dry_run": response.dry_run,
+            "fallback_used": response.fallback_used,
+        }
+
+
+class PrCheckerAgent:
+    """Renders verdicts for PR claims against diff evidence.
+
+    Identical trust-gate semantics as ``ReadmeCheckerAgent``: any claim
+    with no retrieved hunk evidence is forced to ``unsupported`` after
+    the LLM responds.
+    """
+
+    def __init__(self, unified: UnifiedLLM, prompt_renderer: Callable[[str, dict[str, Any]], str]):
+        self.unified = unified
+        self.render = prompt_renderer
+
+    async def execute(
+        self,
+        claims: list[ReadmeClaim],
+        evidence: list[ClaimEvidence],
+    ) -> dict[str, Any]:
+        evidence_by_claim = {e.claim_id: e for e in evidence}
+        evidence_payload = [e.model_dump() for e in evidence]
+        claims_payload = [c.model_dump() for c in claims]
+
+        system_prompt = self.render(
+            "pr_checker",
+            {"verdict_values": " | ".join(ALL_VERDICTS)},
+        )
+        user_prompt = (
+            "Judge each PR claim against its retrieved diff evidence and return "
+            "a ClaimVerdictList JSON object.\n\n"
+            f"CLAIMS:\n{json.dumps(claims_payload, indent=2)}\n\n"
+            f"DIFF EVIDENCE:\n{json.dumps(evidence_payload, indent=2)}"
+        )
+        response = await self.unified.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            mode="balanced",
+            response_schema=_schema_for(ClaimVerdictList),
+        )
+        parsed = _parse_structured(response.content, ClaimVerdictList)
+        verdicts = _enforce_trust_gate(parsed.verdicts, claims, evidence_by_claim)
+        parsed.verdicts = verdicts
+        return {
+            "agent": "pr_checker",
+            "tier": "middle",
+            "status": "success",
+            "output": parsed,
+            "provider": response.provider_used,
+            "model": response.model,
+            "latency_ms": response.latency_ms,
+            "cost_estimate_usd": response.cost_estimate_usd,
+            "dry_run": response.dry_run,
+            "fallback_used": response.fallback_used,
+        }

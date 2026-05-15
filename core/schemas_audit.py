@@ -41,6 +41,15 @@ class ReadmeClaimList(BaseModel):
     readme_path: str = ""
 
 
+# Cross-domain aliases. README and PR claims share the same shape; the
+# differing-in-name dance is purely for call-site readability. When a
+# third auditor lands we'll rename ReadmeClaim → AuditClaim cleanly;
+# until then the alias keeps PR code self-explanatory without churning
+# the README slice's imports.
+AuditClaim = ReadmeClaim
+AuditClaimList = ReadmeClaimList
+
+
 class EvidenceRef(BaseModel):
     """Adapter-agnostic citation handle. Mirrors ``EvidenceSnippet``
     in shape but is the JSON-serialisable form passed across the
@@ -77,6 +86,10 @@ class ClaimVerdictList(BaseModel):
 class AuditReport(BaseModel):
     repo_path: str
     readme_path: str = ""
+    # Free-form identifier of the audited artefact (PR URL, doc path, …).
+    # Kept optional so the README slice can leave it blank and stay
+    # backwards-compatible with the prior shape.
+    target: str = ""
     verdicts: list[ClaimVerdict] = Field(default_factory=list)
     summary: dict[str, int] = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)

@@ -8,6 +8,22 @@ README-audit slice we ship only the local-repo adapter.
 """
 
 from core.sources.base import EvidenceSnippet, SourceAdapter
+from core.sources.github import (
+    GitHubAdapter,
+    PrSpec,
+    fetch_pr_from_github,
+    load_pr_fixture,
+    parse_pr_url,
+)
 from core.sources.local_repo import LocalRepoAdapter
 
-__all__ = ["EvidenceSnippet", "LocalRepoAdapter", "SourceAdapter"]
+__all__ = [
+    "EvidenceSnippet",
+    "GitHubAdapter",
+    "LocalRepoAdapter",
+    "PrSpec",
+    "SourceAdapter",
+    "fetch_pr_from_github",
+    "load_pr_fixture",
+    "parse_pr_url",
+]
