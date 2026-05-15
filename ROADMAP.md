@@ -19,6 +19,19 @@
 - ✅ Docker Compose stack (Redis, Qdrant, CLI, MCP) and CI matrix on Python 3.9 / 3.12
 - ✅ **RAG over user PDFs** — `thesis ingest add paper.pdf --collection my_papers` chunks + embeds via FastEmbed (BAAI/bge-small-en-v1.5) into Qdrant; the researcher transparently retrieves from the user collection when `thesis research ... --rag-collection my_papers` is set. Collections are namespaced under `rag_*` so they cannot collide with the thesis corpus or episodic memory.
 
+## Code-audit track (new flagship)
+
+A second domain alongside the thesis assistant: audit factual claims in technical artefacts against the codebase. Same DNA — multi-agent, structured JSON, never fabricates, trust gate refuses verdicts without evidence — applied to a domain where trustworthy automated review matters to OSS maintainers and contributors. See [AGENTS.md](AGENTS.md) for the contributor recipe and trust-gate invariant.
+
+- ✅ **README auditor** *(first slice, shipped)*. `openworkers audit readme <repo>` extracts atomic claims from a README and verdicts each one against the actual codebase as `verified | drifted | unsupported | contradicted`. Trust gate is enforced in `providers/code_audit_agents.py::_enforce_trust_gate`, not in prompts. The audited README is excluded from its own evidence pool. New `SourceAdapter` abstraction (`core/sources/`) with `LocalRepoAdapter`.
+- 🚧 **PR auditor** — `openworkers audit pr <url>`. Verify the PR description against the actual diff; flag scope creep, missing tests, undocumented changes. Needs a `GitHubAdapter` implementing `SourceAdapter`.
+- 🚧 **Compliance auditor** — `openworkers audit compliance <repo>`. Verify security/policy claims ("inputs sanitized", "no secrets", "auth required on X") against the code.
+- 🚧 **Architecture auditor** — verify RFC / design-doc claims against implementation, language specs, and dependency source.
+- 🚧 **Layered source adapters** — repo (highest trust) → language specs / RFCs (`SpecAdapter`) → dependency source (`DependencyAdapter`). The existing literature MCP tools (arXiv / Semantic Scholar / CrossRef) will migrate behind the same `SourceAdapter` contract.
+- 📋 **Tool/source registry** — `@register_source(...)` decorator + entry-point discovery so users add their own evidence backends without forking.
+- 📋 **Local-inference provider** — Ollama path so users can audit private/proprietary repos without sending code to a cloud LLM.
+- 🚧 **Gradual thesis deprecation** — the thesis pipeline stays first-class through the transition; deprecation happens after the audit track reaches feature parity.
+
 ## Proposed for 1.0
 
 The 1.0 line targets a polished, packaged release on PyPI. The themes:
