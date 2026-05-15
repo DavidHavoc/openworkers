@@ -149,3 +149,22 @@ The thesis pipeline stays first-class through the transition, then is gradually 
 - **Sharing `core/schemas.py` between domains.** Keep `schemas_audit.py` separate. The merge cost is low; the divergence cost of cross-domain field coupling is high.
 - **Adding the README to its own evidence pool.** Already burned us once. Self-evidence makes hallucinations verify themselves.
 - **Skipping `from __future__ import annotations` because "we're on 3.13 locally".** CI runs on 3.9.
+
+## Response behavior
+
+- Be concise, technical, and specific.
+- State uncertainty directly.
+- Prefer exact file names, functions, and commands over general advice.
+- If a requested change would break an invariant, stop and say so.
+- If multiple implementation paths exist, choose the smallest change that satisfies the task.
+- Do not add decorative wording, emojis, or stylistic punctuation flourishes.
+
+## Writing rules
+
+- Use plain English.
+- Do not use em dashes; use commas, colons, or separate sentences instead.
+- Do not use emojis.
+- Do not use hypey or marketing-heavy language.
+- Do not use filler words like "delve", "realm", "leverage" unless genuinely necessary.
+- Keep comments and docs concrete, specific, and technical.
+- Prefer short paragraphs and bullet lists over long, fluffy explanations.

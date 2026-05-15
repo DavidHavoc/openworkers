@@ -1,5 +1,7 @@
 # Architecture
 
+#### **outdated***
+
 ## Pipeline
 
 ```mermaid
