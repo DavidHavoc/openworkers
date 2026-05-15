@@ -6,9 +6,29 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Lint: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-A multi-agent thesis assistant that searches real literature, audits citations, and produces structured critiques. **It does not write prose.** It runs a hierarchical pipeline (HEAD planner → researcher → checker → synthesizer → critic → HEAD supervisor) over a Redis blackboard, with provider-agnostic LLM routing across Anthropic, OpenAI, and DeepSeek and verified citations via arXiv, Semantic Scholar, and CrossRef.
+A multi-agent system that **refuses to make things up**. Two domains live here today:
 
-> **Project status:** 0.1.0 (pre-release). The pipeline runs end-to-end and ships an MCP server, a CLI, and a FastAPI app, but APIs may shift before 1.0. See [ROADMAP.md](ROADMAP.md) for the planned 1.0 direction.
+- **Thesis assistant** — audits literature claims against arXiv / Semantic Scholar / CrossRef.
+- **Code audit** *(new flagship, in progress)* — audits factual claims in technical artefacts (READMEs first, then PRs / compliance docs / architecture docs) against the actual codebase, language specs, and dependencies.
+
+Both domains share the same DNA: a hierarchical pipeline (planner → researcher → checker → critic) producing structured JSON, with provider-agnostic LLM routing across Anthropic, OpenAI, and DeepSeek and a hard trust gate that **refuses to verdict without evidence**.
+
+> **Project status:** 0.1.0 (pre-release). The thesis pipeline runs end-to-end; the code-audit track has landed its first slice (`openworkers audit readme <repo>`). APIs may shift before 1.0. See [ROADMAP.md](ROADMAP.md) for direction, [AGENTS.md](AGENTS.md) for contributor context.
+
+## Code audit *(new track)*
+
+`openworkers audit readme <repo>` extracts every factual claim from a README and verdicts each one against the actual repository:
+
+| Verdict | Meaning |
+|---|---|
+| `verified` | Code clearly demonstrates the claim is true |
+| `drifted` | A related but divergent implementation exists (renamed flag, changed default, etc.) |
+| `contradicted` | Code directly disproves the claim |
+| `unsupported` | No evidence in the repo — enforced in code, not delegated to the LLM |
+
+The pipeline is planner (LLM extracts claims) → researcher (deterministic grep via `LocalRepoAdapter`) → checker (LLM judges + trust gate forces `unsupported` when evidence is empty) → critic (adversarial pass). The audited README is excluded from its own evidence pool, so fabricated claims cannot verify themselves.
+
+Roadmap for this track: PR auditor (PR description vs. diff), compliance auditor (security/policy claims vs. code), architecture auditor (design doc vs. implementation). See [AGENTS.md](AGENTS.md) for the contributor recipe.
 
 ## What it does
 

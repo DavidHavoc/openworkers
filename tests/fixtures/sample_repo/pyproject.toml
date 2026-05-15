@@ -1,0 +1,8 @@
+[project]
+name = "widgetlib"
+version = "0.9.0"
+description = "Tiny widget library."
+requires-python = ">=3.9"
+dependencies = [
+    "jinja2>=3.1.0",
+]

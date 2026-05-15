@@ -9,6 +9,7 @@ from apps.shared.formatting import (
     format_session_text,
 )
 from core.memory.episodic import EpisodicMemory
+from core.orchestrator.readme_flow import ReadmeAuditOrchestrator, format_report_text
 from core.orchestrator.thesis_flow import ThesisOrchestrator
 from core.router.engine import Router
 from core.schemas import ResearchContext
@@ -230,6 +231,29 @@ async def cmd_corpus(args):
     return summary
 
 
+async def cmd_audit_dispatch(args):
+    """Route `audit <subcommand>` to its handler."""
+    if args.audit_action == "readme":
+        return await cmd_audit_readme(args)
+    raise SystemExit(f"Unknown audit action: {args.audit_action}")
+
+
+async def cmd_audit_readme(args):
+    """Run the README auditor on a local repo."""
+    unified = create_unified_llm()
+    orch = ReadmeAuditOrchestrator(unified=unified)
+    report, critique = await orch.audit(repo_path=args.repo, readme_path=args.readme)
+    if args.format == "json":
+        payload = {
+            "report": report.model_dump(),
+            "critique": critique.model_dump(),
+        }
+        _output(payload, "json", args.output)
+    else:
+        _output(format_report_text(report, critique), "text", args.output)
+    return report
+
+
 async def cmd_ingest(args):
     from tools.mcp.rag import RAGIndexer
 
@@ -355,6 +379,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_corpus.add_argument("--year", type=int, default=0, help="Year of publication")
     add_output_args(p_corpus)
 
+    p_audit = sub.add_parser("audit", help="Audit technical artefacts against the codebase")
+    audit_sub = p_audit.add_subparsers(dest="audit_action", required=True)
+
+    p_audit_readme = audit_sub.add_parser(
+        "readme",
+        help="Verify every factual claim in a README against the repository",
+    )
+    p_audit_readme.add_argument(
+        "repo",
+        type=str,
+        help="Path to the repository to audit",
+    )
+    p_audit_readme.add_argument(
+        "--readme",
+        type=str,
+        default=None,
+        help="Explicit README path (default: auto-discover under <repo>)",
+    )
+    add_output_args(p_audit_readme)
+
     p_ingest = sub.add_parser("ingest", help="Manage user RAG collections (PDF/text -> Qdrant)")
     ingest_sub = p_ingest.add_subparsers(dest="ingest_action", required=True)
 
@@ -402,6 +446,7 @@ def main():
         "sessions": cmd_sessions,
         "corpus": cmd_corpus,
         "ingest": cmd_ingest,
+        "audit": cmd_audit_dispatch,
     }
 
     handler = command_map.get(args.command)
