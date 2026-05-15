@@ -21,6 +21,21 @@ from providers.unified import UnifiedLLM
 logger = logging.getLogger(__name__)
 
 
+__all__ = [
+    "CheckerAgent",
+    "CriticAgent",
+    "ResearcherAgent",
+    "SynthesizerAgent",
+    "ThesisHeadProvider",
+    "_build_placeholder_citation_audit",
+    "_build_placeholder_critique_result",
+    "_build_placeholder_lit_map",
+    "_build_placeholder_research_plan",
+    "_build_placeholder_synthesis_report",
+    "_schema_for",
+]
+
+
 _MODEL_SCHEMAS: Dict[Type[BaseModel], Dict[str, Any]] = {}
 _SCHEMA_NAMES: Dict[Type[BaseModel], str] = {
     ResearchPlan: "ResearchPlan",
