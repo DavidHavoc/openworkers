@@ -20,7 +20,9 @@ class IPRateLimitMiddleware(BaseHTTPMiddleware):
     when the tracked IP count exceeds a watermark.
     """
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         settings = get_settings()
         if not settings.api_rate_limit_enabled:
             return await call_next(request)
